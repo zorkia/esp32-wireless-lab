@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="เว็บสอนการสื่อสารไร้สายของ ESP32 แบบ animation และ simulation: ESP-NOW, Wi-Fi, BLE, LoRa, MQTT">
+<title>ESP32 Wireless Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: PCB bench. Header strip, then topics | stage | info, with packet flow under stage+info. Dark solder-mask first, copper accent, silkscreen text. */
+:root{
+  --bg:#0a1411; --panel:#0e1b17; --panel2:#12241f; --line:#1f3a33; --line2:#2b4d44;
+  --fg:#dde8e2; --muted:#88a198; --faint:#5d766d;
+  --copper:#e0975c; --copper-ink:#1a0f06; --copper-soft:rgba(224,151,92,.14);
+  --k1:#e8b84a; --k2:#5cc98f; --k3:#6fa3ec; --k4:#4fc3c9; --k5:#b48cf0; --bad:#ec6a5e;
+  --grid:rgba(120,190,160,.07);
+  --f-disp:"Chakra Petch","IBM Plex Sans Thai",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans Thai","Chakra Petch",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono","IBM Plex Sans Thai",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#eef2ee; --panel:#f8faf7; --panel2:#eaf0eb; --line:#cad8d0; --line2:#b3c7bc;
+  --fg:#13231e; --muted:#566c64; --faint:#7d9189;
+  --copper:#a9561c; --copper-ink:#fff7f0; --copper-soft:rgba(169,86,28,.10);
+  --k1:#a8740a; --k2:#1d8a53; --k3:#2f63b8; --k4:#13838a; --k5:#7449c2; --bad:#c23a2e;
+  --grid:rgba(40,90,70,.08); color-scheme:light;}}
+:root[data-theme="light"]{
+  --bg:#eef2ee; --panel:#f8faf7; --panel2:#eaf0eb; --line:#cad8d0; --line2:#b3c7bc;
+  --fg:#13231e; --muted:#566c64; --faint:#7d9189;
+  --copper:#a9561c; --copper-ink:#fff7f0; --copper-soft:rgba(169,86,28,.10);
+  --k1:#a8740a; --k2:#1d8a53; --k3:#2f63b8; --k4:#13838a; --k5:#7449c2; --bad:#c23a2e;
+  --grid:rgba(40,90,70,.08); color-scheme:light;}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{margin:0;font-family:var(--f-body);font-size:15px;line-height:1.6;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 28px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+.mono{font-family:var(--f-mono)}
+.lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;border:1px solid var(--line);background:var(--panel);margin-bottom:14px}
+.top>div{padding:12px 18px;border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;min-width:0}
+.top>div:last-child{border-right:0;margin-left:auto}
+.brand{flex-direction:row!important;align-items:center;gap:14px!important}
+.brand svg{flex:none}
+.brand h1{font-family:var(--f-disp);font-size:22px;line-height:1.1;margin:0;letter-spacing:.06em;font-weight:700}
+.brand h1 b{color:var(--copper);font-weight:700}
+.brand p{margin:0;font-size:12.5px;color:var(--muted)}
+.now h2{margin:0;font-family:var(--f-disp);font-size:18px;letter-spacing:.04em;line-height:1.2}
+.osi{display:flex;gap:4px}
+.osi span{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line2);font-family:var(--f-mono);font-size:11px;color:var(--faint)}
+.osi span.on{background:var(--copper);border-color:var(--copper);color:var(--copper-ink);font-weight:700}
+.prog{min-width:220px}
+.bar{display:flex;gap:3px}
+.bar i{flex:1;height:6px;background:var(--line)}
+.bar i.on{background:var(--copper)}
+.theme{flex-direction:row!important;align-items:center;gap:6px!important}
+.theme button{background:transparent;border:1px solid var(--line2);padding:6px 10px;font-family:var(--f-mono);font-size:12px}
+.theme button[aria-pressed="true"]{background:var(--copper);border-color:var(--copper);color:var(--copper-ink)}
+
+/* grid */
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr) 370px;grid-template-areas:"topics stage info" "topics flow flow";gap:14px}
+.panel{border:1px solid var(--line);background:var(--panel);min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.ph h3{margin:0;font-family:var(--f-disp);font-size:17px;letter-spacing:.08em;text-transform:uppercase}
+.topics{grid-area:topics;align-self:start}
+.stage{grid-area:stage}
+.info{grid-area:info}
+.flow{grid-area:flow}
+
+/* topics */
+.cats{display:flex;border-bottom:1px solid var(--line)}
+.cats button{flex:1;background:none;border:0;border-right:1px solid var(--line);padding:9px 4px;font-family:var(--f-mono);font-size:12px;color:var(--muted);letter-spacing:.06em}
+.cats button:last-child{border-right:0}
+.cats button[aria-selected="true"]{color:var(--fg);box-shadow:inset 0 -2px 0 var(--copper)}
+.cats em{font-style:normal;color:var(--faint);margin-left:4px}
+.tlist{list-style:none;margin:0;padding:8px}
+.titem>button{width:100%;display:grid;grid-template-columns:14px 1fr auto;gap:12px;align-items:center;text-align:left;background:none;border:1px solid transparent;padding:10px 12px}
+.titem>button:hover{background:var(--panel2)}
+.titem.active>button{border-color:var(--copper);background:var(--copper-soft)}
+.dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--line2)}
+.dot.done{background:var(--k2);border-color:var(--k2)}
+.tname{font-family:var(--f-disp);font-weight:600;font-size:16px;letter-spacing:.04em;line-height:1.2}
+.tsub{font-size:12.5px;color:var(--muted);line-height:1.3}
+.tag{font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;padding:2px 6px;border:1px solid var(--line2);color:var(--muted)}
+.tag.sim{border-color:var(--copper);color:var(--copper)}
+.steps{list-style:none;margin:4px 0 10px;padding:0 6px 0 22px;position:relative}
+.steps:before{content:"";position:absolute;left:33px;top:14px;bottom:14px;border-left:1px dashed var(--line2)}
+.steps li{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:6px 0;position:relative}
+.steps .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line2);font-family:var(--f-mono);font-size:11px;z-index:1}
+.steps li.cur .n{background:var(--copper);border-color:var(--copper);color:var(--copper-ink);font-weight:700}
+.steps li.past .n{border-color:var(--k2);color:var(--k2)}
+.steps b{display:block;font-family:var(--f-mono);font-size:12.5px;font-weight:500;letter-spacing:.04em}
+.steps span{font-size:12.5px;color:var(--muted);line-height:1.35;display:block}
+.steps li.cur b{color:var(--copper)}
+
+/* stage */
+.vtabs{display:flex;gap:4px;padding:10px 12px 0}
+.vtabs button{background:none;border:1px solid var(--line2);padding:6px 12px;font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.vtabs button[aria-selected="true"]{background:var(--copper);border-color:var(--copper);color:var(--copper-ink)}
+.canvas{margin:10px 12px 0;border:1px solid var(--line);background-color:var(--bg);background-image:radial-gradient(var(--grid) 1.2px,transparent 1.3px);background-size:18px 18px;position:relative}
+#net{display:block;width:100%;height:auto;max-height:420px}
+#seqWrap{max-height:420px;overflow:auto}
+#frameWrap{padding:16px;overflow-x:auto}
+.narr{margin:10px 12px 12px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;border:1px solid var(--line);background:var(--panel2);padding:10px 14px;min-height:58px}
+.narr .pill{font-family:var(--f-mono);font-size:11px;padding:3px 8px;border:1px solid currentColor;white-space:nowrap;margin-top:2px}
+.narr p{margin:0;font-size:14px;max-width:80ch}
+/* lab */
+.lab{border-top:1px solid var(--line);padding:12px 12px 14px}
+.lab-h{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px}
+.lab-h h4{margin:0;font-family:var(--f-disp);font-size:15px;letter-spacing:.06em}
+.ctrls{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px 14px}
+.ctrl{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ctrl label,.ctrl .lbl{font-size:10.5px}
+.ctrl select,.ctrl input[type=range]{width:100%}
+.ctrl select{background:var(--panel2);border:1px solid var(--line2);padding:5px 6px;font-size:13px}
+.ctrl output{font-family:var(--f-mono);font-size:13px;color:var(--fg)}
+.seg{display:flex;border:1px solid var(--line2)}
+.seg button{flex:1;background:none;border:0;padding:5px 4px;font-size:12.5px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button[aria-pressed="true"]{background:var(--copper-soft);color:var(--fg);box-shadow:inset 0 -2px 0 var(--copper)}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+input[type=range]{accent-color:var(--copper)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{border:1px solid var(--line2);padding:5px 10px;font-family:var(--f-mono);font-size:12px;display:flex;gap:8px;align-items:baseline;font-variant-numeric:tabular-nums}
+.chip small{color:var(--muted);font-size:10.5px;letter-spacing:.06em;font-family:var(--f-body)}
+.chip.good{border-color:var(--k2)} .chip.warn{border-color:var(--k1)} .chip.bad{border-color:var(--bad);color:var(--bad)}
+.hint{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+
+/* info */
+.itabs{display:flex;border-bottom:1px solid var(--line)}
+.itabs button{flex:1;background:none;border:0;padding:10px;font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--muted)}
+.itabs button[aria-selected="true"]{color:var(--fg);box-shadow:inset 0 -2px 0 var(--copper)}
+.ov{padding:16px 18px}
+.ov-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ov h4{margin:0;font-family:var(--f-disp);font-size:34px;line-height:1;letter-spacing:.04em}
+.ov .full{font-family:var(--f-mono);font-size:13px;color:var(--muted);margin:6px 0 12px}
+.ov p{margin:0 0 14px;font-size:14px}
+.facts{width:100%;border-collapse:collapse;font-size:13px}
+.facts th{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-align:left;color:var(--muted);font-weight:500;padding:8px 10px 8px 0;vertical-align:top;width:40%}
+.facts td{padding:8px 0;border-top:1px solid var(--line)}
+.facts th{border-top:1px solid var(--line)}
+.code{padding:0 0 12px}
+.code-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px}
+.code-h .seg{width:auto}
+.code-h .seg button{padding:4px 10px}
+pre{margin:0;padding:8px 0;overflow-x:auto;font-family:var(--f-mono);font-size:12px;line-height:1.65;max-height:520px;overflow-y:auto}
+pre .ln{display:block;padding:0 14px 0 10px;border-left:3px solid transparent;white-space:pre}
+pre .ln.hl{background:var(--copper-soft);border-left-color:var(--copper)}
+pre .ln.dim{opacity:.55}
+.c-c{color:var(--faint);font-style:italic}.c-s{color:var(--k2)}.c-k{color:var(--k3)}.c-n{color:var(--k1)}.c-p{color:var(--k5)}
+.copy{background:none;border:1px solid var(--line2);padding:4px 10px;font-family:var(--f-mono);font-size:11.5px}
+
+/* flow */
+.flow .ph{flex-wrap:wrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-right:auto;margin-left:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.ctl{display:flex;gap:6px;flex-wrap:wrap}
+.ctl button,.ctl select{background:var(--panel2);border:1px solid var(--line2);padding:7px 12px;font-family:var(--f-mono);font-size:12.5px;letter-spacing:.06em}
+.ctl .play{background:var(--copper);border-color:var(--copper);color:var(--copper-ink);font-weight:700;min-width:96px}
+.tw{max-height:330px;overflow:auto}
+table.pk{width:100%;border-collapse:collapse;font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums;min-width:760px}
+.pk th{position:sticky;top:0;background:var(--panel);text-align:left;font-weight:500;font-size:11px;letter-spacing:.08em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+.pk td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.pk td.info{white-space:normal;min-width:260px}
+.pk tr{cursor:pointer}
+.pk tr:hover td{background:var(--panel2)}
+.pk tr.future td{opacity:.42}
+.pk tr.cur td{background:var(--copper-soft)}
+.pk tr.cur td:first-child{box-shadow:inset 3px 0 0 var(--copper)}
+.pk tr.lost .info{color:var(--bad)}
+.num{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;color:var(--bg)}
+.pk .r{text-align:right}
+.detail{border-top:1px solid var(--line);padding:12px 16px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:18px}
+.detail h5{margin:0 0 6px;font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:500}
+.detail p{margin:0;font-size:13.5px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-family:var(--f-mono);font-size:12px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-all}
+.foot{margin-top:14px;font-size:12px;color:var(--faint);display:flex;flex-wrap:wrap;gap:6px 18px}
+
+/* frame view */
+.fbar{display:flex;gap:2px;min-width:640px}
+.fbar div{min-width:38px;border:1px solid var(--line2);padding:6px 6px;font-family:var(--f-mono);font-size:10.5px;line-height:1.3;background:var(--panel2);overflow:hidden}
+.fbar div b{display:block;font-size:12px;color:var(--fg)}
+.fbar div.hdr{border-top:3px solid var(--k3)} .fbar div.esp{border-top:3px solid var(--copper)} .fbar div.body{border-top:3px solid var(--k1)} .fbar div.sec{border-top:3px solid var(--k5)} .fbar div.fcs{border-top:3px solid var(--faint)}
+.ftable{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;min-width:560px}
+.ftable td,.ftable th{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.ftable th{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.06em}
+.ftable td:nth-child(2){font-family:var(--f-mono);white-space:nowrap}
+.ftable td:nth-child(3){font-family:var(--f-mono);font-size:12px}
+.ftotal{margin-top:10px;font-family:var(--f-mono);font-size:13px}
+
+@media (max-width:1180px){
+  .grid{grid-template-columns:270px minmax(0,1fr);grid-template-areas:"topics stage" "info info" "flow flow"}
+}
+@media (max-width:820px){
+  .grid{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "topics" "info" "flow"}
+  .top>div{border-right:0;border-bottom:1px solid var(--line);width:100%}
+  .top>div:last-child{margin-left:0;border-bottom:0}
+  .detail{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><rect x="7" y="9" width="30" height="26" fill="none" stroke="var(--copper)" stroke-width="2"/><rect x="12" y="14" width="14" height="16" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="1.5"/><path d="M29 14h4v4h-4v4h4v4h-4" fill="none" stroke="var(--copper)" stroke-width="1.5"/><g stroke="var(--muted)" stroke-width="1.5"><path d="M11 9V4M17 9V4M23 9V4M29 9V4M11 35v5M17 35v5M23 35v5M29 35v5"/></g></svg>
+    <div><h1>ESP32 <b>WIRELESS</b> LAB</h1><p>เรียนรู้การสื่อสารไร้สายของ IoT ผ่านภาพเคลื่อนไหวและการจำลอง</p></div>
+  </div>
+  <div class="now"><span class="lbl">กำลังเรียน</span><h2 id="nowName">ESP-NOW</h2><span class="lbl" id="nowSub">5 ขั้นตอน</span></div>
+  <div><span class="lbl">ชั้น OSI ที่เกี่ยวข้อง</span><div class="osi" id="osi"></div></div>
+  <div class="prog"><span class="lbl" style="display:flex;justify-content:space-between;gap:12px;width:100%"><span>ความคืบหน้า</span><span id="progPct">0%</span></span><div class="bar" id="progBar"></div><span class="lbl" id="progTxt">0 / 5 หัวข้อ</span></div>
+  <div class="theme"><span class="lbl">ธีม</span><button id="thAuto" aria-pressed="true">AUTO</button><button id="thLight" aria-pressed="false">LIGHT</button><button id="thDark" aria-pressed="false">DARK</button></div>
+</header>
+
+<main class="grid">
+  <aside class="panel topics">
+    <div class="ph"><h3>หัวข้อ</h3><span class="lbl">ESP32 DevKitC</span></div>
+    <div class="cats" role="tablist" id="cats"></div>
+    <ul class="tlist" id="tlist"></ul>
+  </aside>
+
+  <section class="panel stage">
+    <div class="vtabs" role="tablist" id="vtabs">
+      <button data-v="net" aria-selected="true">เครือข่าย</button>
+      <button data-v="seq" aria-selected="false">ลำดับเหตุการณ์</button>
+      <button data-v="frame" aria-selected="false" id="vFrame">โครงสร้างเฟรม</button>
+    </div>
+    <div class="canvas">
+      <svg id="net" viewBox="0 0 800 380" role="img" aria-label="แผนภาพเครือข่าย"></svg>
+      <div id="seqWrap" hidden></div>
+      <div id="frameWrap" hidden></div>
+    </div>
+    <div class="narr"><span class="pill" id="narrPill">พร้อม</span><p id="narrTxt">กด PLAY เพื่อดูการสื่อสารทีละแพ็กเก็ต หรือกด STEP เพื่อเดินทีละขั้น</p></div>
+    <div class="lab" id="lab" hidden>
+      <div class="lab-h"><h4>ปรับค่าการจำลอง ESP-NOW</h4><span class="lbl">ลองเปลี่ยนค่าแล้วกด PLAY ใหม่</span></div>
+      <div class="ctrls">
+        <div class="ctrl"><span class="lbl">รูปแบบการส่ง</span><div class="seg" id="cMode"><button data-v="uni" aria-pressed="true">Unicast</button><button data-v="bcast" aria-pressed="false">Broadcast</button></div></div>
+        <div class="ctrl"><span class="lbl">เวอร์ชัน</span><div class="seg" id="cVer"><button data-v="1" aria-pressed="true">v1.0</button><button data-v="2" aria-pressed="false">v2.0</button></div></div>
+        <div class="ctrl"><label class="lbl" for="cPay">ขนาดข้อมูล (payload)</label><input type="range" id="cPay" min="1" max="250" value="8"><output id="oPay">8 ไบต์</output></div>
+        <div class="ctrl"><label class="lbl" for="cDist">ระยะห่าง</label><input type="range" id="cDist" min="1" max="600" value="20"><output id="oDist">20 m</output></div>
+        <div class="ctrl"><label class="lbl" for="cEnv">สภาพแวดล้อม</label><select id="cEnv"><option value="open">กลางแจ้ง โล่ง</option><option value="indoor">ในอาคาร มีผนัง</option></select></div>
+        <div class="ctrl"><label class="lbl" for="cRate">อัตรา PHY</label><select id="cRate"><option value="1">1 Mbps (ค่าเริ่มต้น)</option><option value="11">11 Mbps</option><option value="54">54 Mbps</option></select></div>
+        <div class="ctrl"><label class="lbl" for="cCh">ช่องของผู้รับ (ผู้ส่งอยู่ CH 1)</label><select id="cCh"><option value="1">CH 1</option><option value="6">CH 6</option><option value="11">CH 11</option></select></div>
+        <div class="ctrl"><span class="lbl">เข้ารหัส (CCMP)</span><div class="seg" id="cEnc"><button data-v="0" aria-pressed="true">ปิด</button><button data-v="1" aria-pressed="false">เปิด</button></div></div>
+        <div class="ctrl"><label class="lbl" for="cCount">จำนวนข้อความ</label><input type="range" id="cCount" min="1" max="5" value="3"><output id="oCount">3 ข้อความ</output></div>
+        <div class="ctrl"><label class="lbl" for="cRetry">ส่งซ้ำสูงสุด (โมเดล)</label><input type="range" id="cRetry" min="0" max="7" value="3"><output id="oRetry">3 ครั้ง</output></div>
+        <div class="ctrl"><span class="lbl">สุ่มสัญญาณรบกวน</span><button class="copy" id="cSeed" style="padding:6px 10px">สุ่มใหม่ (ชุดที่ 1)</button></div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="hint" id="labHint"></p>
+    </div>
+  </section>
+
+  <aside class="panel info">
+    <div class="itabs" role="tablist" id="itabs">
+      <button data-t="ov" aria-selected="true">ภาพรวม</button>
+      <button data-t="code" aria-selected="false">โค้ด ARDUINO</button>
+    </div>
+    <div class="ov" id="ov"></div>
+    <div class="code" id="code" hidden></div>
+  </aside>
+
+  <section class="panel flow">
+    <div class="ph">
+      <h3>Packet Flow</h3>
+      <div class="legend" id="legend"></div>
+      <div class="ctl">
+        <select id="speed" aria-label="ความเร็ว"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+        <button id="bPrev" aria-label="ย้อนกลับ">PREV</button>
+        <button id="bPlay" class="play">PLAY</button>
+        <button id="bStep">STEP</button>
+        <button id="bReset">RESET</button>
+      </div>
+    </div>
+    <div class="tw" id="tw"><table class="pk"><thead><tr><th>ลำดับ</th><th>เวลา</th><th>ต้นทาง</th><th>ปลายทาง</th><th>โปรโตคอล</th><th>รายละเอียด</th><th class="r">ขนาด</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    <div class="detail" id="detail"></div>
+  </section>
+</main>
+<div class="foot"><span>ต้นแบบสำหรับการสอน วิชา IoT / ระบบสมองกลฝังตัว</span><span id="footNote"></span></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const reduced=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+/* ---------- ESP-NOW model ---------- */
+const MAC={S:"24:0A:C4:11:22:33",R1:"24:0A:C4:AA:BB:CC",R2:"24:0A:C4:DD:EE:FF",B:"FF:FF:FF:FF:FF:FF"};
+const lab={mode:"uni",ver:1,payload:8,dist:20,env:"open",rate:1,rxch:1,enc:false,count:3,retry:3,seed:1};
+const SENS={1:-98,11:-89,54:-75}; // ค่าตัวอย่างใกล้เคียง datasheet ESP32
+const TXP=20;
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function link(){
+  const n=lab.env==="open"?2.7:3.5;
+  const pl=40.05+10*n*Math.log10(Math.max(lab.dist,1));
+  const rssi=TXP-pl, margin=rssi-SENS[lab.rate];
+  const p100=1/(1+Math.exp(-(margin-1)/1.2));
+  return {rssi,margin,p100,n};
+}
+const pOK=(p100,bytes)=>Math.pow(p100,bytes/100);
+function elements(){return lab.ver===1?1:Math.max(1,Math.ceil(lab.payload/250))}
+function frameBytes(){return 24+1+3+4+7*elements()+lab.payload+4+(lab.enc&&lab.mode==="uni"?16:0)}
+function airtime(bytes,rate){return rate<=11?192+bytes*8/rate:20+4*Math.ceil((16+8*bytes+6)/(4*rate))}
+function ackAir(){return lab.rate<=11?airtime(14,1):airtime(14,6)}
+const SIFS=10,DIFS=50,SLOT=20;
+
+function espNodes(){
+  const b=lab.mode==="bcast";
+  const ns=[
+    {id:"AP",label:"Router / AP",sub:"ไม่จำเป็นต้องมี",x:400,y:62,icon:"router",dim:true},
+    {id:"S",label:"ESP32 ผู้ส่ง",sub:MAC.S+"  CH 1",x:150,y:215,icon:"esp"},
+    {id:"R1",label:b?"ESP32 ผู้รับ 1":"ESP32 ผู้รับ",sub:MAC.R1+"  CH "+lab.rxch,x:640,y:b?140:215,icon:"esp"}
+  ];
+  if(b)ns.push({id:"R2",label:"ESP32 ผู้รับ 2",sub:MAC.R2+"  CH "+lab.rxch,x:640,y:300,icon:"esp"});
+  return ns;
+}
+function espLinks(){const L=link();const t=lab.dist+" m / RSSI "+L.rssi.toFixed(0)+" dBm";const a=[["S","R1",t]];if(lab.mode==="bcast")a.push(["S","R2",t]);return a}
+
+function espPackets(){
+  const R=rng(lab.seed*7919+lab.dist*31+lab.payload*17+lab.rate*3+(lab.env==="open"?1:2)+lab.rxch*101+(lab.mode==="uni"?0:5)+(lab.enc?9:0)+lab.ver*13);
+  const L=link(), chOK=lab.rxch===1, fb=frameBytes(), A=airtime(fb,lab.rate), AK=ackAir();
+  const bc=lab.mode==="bcast", enc=lab.enc&&!bc;
+  const P=[]; const ms=us=>us/1000;
+  const push=o=>P.push(o);
+  push({t:0,src:"S",dst:"S",sa:"ESP32 ผู้ส่ง",da:"-",proto:"API",step:1,size:"-",info:"WiFi.mode(WIFI_STA); esp_now_init() = ESP_OK",
+    note:"ผู้ส่งเปิดวิทยุ Wi-Fi ในโหมด station แล้วเริ่มระบบ ESP-NOW ไม่มีการเชื่อมต่อ access point เลย วิทยุอยู่บนช่อง 1 ซึ่งเป็นค่าเริ่มต้น",
+    fields:[["Wi-Fi mode","WIFI_STA"],["ช่องปัจจุบัน","1"],["ผลลัพธ์","ESP_OK"]]});
+  const rxs=bc?["R1","R2"]:["R1"];
+  rxs.forEach(r=>push({t:0,src:r,dst:r,sa:r==="R1"?"ผู้รับ 1":"ผู้รับ 2",da:"-",proto:"API",step:1,size:"-",
+    info:(lab.rxch!==1?"esp_wifi_set_channel("+lab.rxch+"); ":"")+"esp_now_init(); register_recv_cb",
+    note:lab.rxch!==1?"ผู้รับตั้งวิทยุไว้ที่ช่อง "+lab.rxch+" ไม่ตรงกับผู้ส่งซึ่งอยู่ช่อง 1 ดูว่าเกิดอะไรขึ้นกับเฟรมที่ส่งมา":"ผู้รับเริ่ม ESP-NOW และลงทะเบียน recv callback ไว้รอรับข้อมูล ผู้รับไม่จำเป็นต้องเพิ่ม peer หากข้อมูลไม่เข้ารหัส",
+    fields:[["ช่องปัจจุบัน",String(lab.rxch)],["callback","esp_now_register_recv_cb(onRecv)"]]}));
+  push({t:0.12,src:"S",dst:"S",sa:"ESP32 ผู้ส่ง",da:"-",proto:"API",step:2,size:"-",
+    info:"esp_now_add_peer("+(bc?MAC.B:MAC.R1)+", ch=0, encrypt="+(enc?"true":"false")+")",
+    note:bc?"การส่งแบบ broadcast ต้องเพิ่ม peer ที่มี MAC เป็น FF:FF:FF:FF:FF:FF ก่อน และ broadcast เข้ารหัสไม่ได้":"เพิ่ม MAC ของผู้รับลงในรายการ peer ค่า channel = 0 หมายถึงใช้ช่องปัจจุบันของผู้ส่ง ESP-NOW เก็บ peer ได้สูงสุด 20 รายการ"+(enc?" เมื่อเปิดเข้ารหัสต้องกำหนด LMK ขนาด 16 ไบต์":""),
+    fields:[["peer_addr",bc?MAC.B:MAC.R1],["channel","0 (ใช้ช่องปัจจุบัน)"],["ifidx","WIFI_IF_STA"],["encrypt",enc?"true":"false"]].concat(enc?[["lmk","16 ไบต์ (ต้องตรงกับผู้รับ)"]]:[])});
+  if(enc)push({t:0.15,src:"R1",dst:"R1",sa:"ผู้รับ",da:"-",proto:"API",step:2,size:"-",info:"esp_now_add_peer("+MAC.S+", lmk) ฝั่งผู้รับ",
+    note:"ข้อมูลที่เข้ารหัสต้องให้ผู้รับเพิ่มผู้ส่งเป็น peer ด้วย LMK เดียวกัน ไม่เช่นนั้นจะถอดรหัสไม่ได้",fields:[["peer_addr",MAC.S],["lmk","16 ไบต์ เหมือนผู้ส่ง"]]});
+
+  const st={ok:0,fail:0,r1:0,r2:0,tx:0};
+  for(let m=0;m<lab.count;m++){
+    let t=5000+m*1000000; // us
+    const seq=100+m;
+    if(bc){
+      const got={};rxs.forEach(r=>got[r]=chOK&&R()<pOK(L.p100,fb));
+      const lostTo=rxs.filter(r=>!got[r]);st.tx++;
+      push({t:ms(t),src:"S",dst:rxs,lostTo,sa:MAC.S,da:MAC.B,proto:"ESP-NOW",step:3,size:fb,
+        info:"Action frame (broadcast) seq="+seq+" len="+lab.payload+(lostTo.length?" / ไม่ถึง: "+lostTo.map(x=>x==="R1"?"ผู้รับ 1":"ผู้รับ 2").join(", "):""),
+        note:"ส่งเฟรมแบบ broadcast ทุกเครื่องในช่องเดียวกันรับได้พร้อมกัน แต่ไม่มีเครื่องใดตอบ ACK และไม่มีการส่งซ้ำ ใช้เวลาออกอากาศ "+A.toFixed(0)+" µs"+(chOK?"":" ผู้รับอยู่คนละช่องจึงไม่ได้ยินเฟรมนี้เลย"),
+        fields:dataFields(seq,false,MAC.B)});
+      const tE=t+A;
+      rxs.forEach((r,i)=>{if(got[r]){st[r==="R1"?"r1":"r2"]++;push({t:ms(tE+30+i*5),src:r,dst:r,sa:r==="R1"?"ผู้รับ 1":"ผู้รับ 2",da:"-",proto:"CB",step:5,size:"-",info:"onRecv(): ได้รับ "+lab.payload+" ไบต์ RSSI "+L.rssi.toFixed(0)+" dBm",note:"recv callback ทำงานใน Wi-Fi task ควรคัดลอกข้อมูลไปใส่ queue แล้วประมวลผลใน task อื่น ไม่ควรทำงานหนักใน callback",fields:[["src_addr",MAC.S],["des_addr",MAC.B],["data_len",String(lab.payload)]]})}});
+      push({t:ms(tE+60),src:"S",dst:"S",sa:"ESP32 ผู้ส่ง",da:"-",proto:"CB",step:5,size:"-",info:"onSent(): ESP_NOW_SEND_SUCCESS (ส่งออกแล้ว ไม่มี ACK ยืนยัน)",
+        note:"สำหรับ broadcast ผลใน send callback บอกเพียงว่าเฟรมถูกส่งออกอากาศแล้ว ไม่ได้ยืนยันว่ามีผู้รับจริง ถ้าต้องการความแน่นอนต้องให้ผู้รับส่งข้อความตอบกลับเอง",fields:[["status","ESP_NOW_SEND_SUCCESS"]]});
+      continue;
+    }
+    let delivered=false, success=false, cw=15;
+    for(let a=0;a<=lab.retry;a++){
+      const okD=chOK&&R()<pOK(L.p100,fb);
+      const retry=a>0;st.tx++;
+      push({t:ms(t),src:"S",dst:"R1",lost:!okD,sa:MAC.S,da:MAC.R1,proto:"ESP-NOW",step:3,size:fb,
+        info:"Action frame seq="+seq+(retry?" [retry "+a+"]":"")+" len="+lab.payload+(enc?" CCMP":"")+(okD?" RSSI "+L.rssi.toFixed(0)+" dBm":" / สูญหาย"),
+        note:okD?(retry?"ส่งซ้ำครั้งที่ "+a+" โดยใช้ sequence number เดิม และตั้ง retry bit ":"esp_now_send() ส่งข้อมูลในรูป vendor-specific action frame ")+"ใช้เวลาออกอากาศ "+A.toFixed(0)+" µs ที่ "+lab.rate+" Mbps"
+          :(chOK?"เฟรมสูญหายระหว่างทาง สัญญาณที่ผู้รับประมาณ "+L.rssi.toFixed(0)+" dBm เหลือ margin "+L.margin.toFixed(0)+" dB เหนือความไวรับ ผู้ส่งจะไม่ได้รับ ACK":"ผู้รับฟังอยู่ช่อง "+lab.rxch+" แต่เฟรมถูกส่งบนช่อง 1 ผู้รับจึงไม่ได้ยิน ไม่ว่าจะส่งซ้ำกี่ครั้งก็ไม่สำเร็จ"),
+        fields:dataFields(seq,retry,MAC.R1)});
+      let tE=t+A;
+      if(okD){
+        if(!delivered){delivered=true;st.r1++;push({t:ms(tE+SIFS+AK+20),src:"R1",dst:"R1",sa:"ผู้รับ",da:"-",proto:"CB",step:5,size:"-",info:"onRecv(): ได้รับ "+lab.payload+" ไบต์"+(enc?" (ถอดรหัสด้วย LMK)":""),note:"recv callback ถูกเรียกเมื่อเฟรมผ่านการตรวจในชั้น MAC แล้ว ข้อมูลจึงถึงโปรแกรมของผู้รับ callback นี้ทำงานใน Wi-Fi task จึงไม่ควรทำงานหนักในนี้",fields:[["src_addr",MAC.S],["data_len",String(lab.payload)],["rx_ctrl.rssi",L.rssi.toFixed(0)+" dBm"]]})}
+        else push({t:ms(tE+2),src:"R1",dst:"R1",sa:"ผู้รับ",da:"-",proto:"MAC",step:4,size:"-",info:"ทิ้งเฟรมซ้ำ (seq="+seq+" retry=1)",note:"ผู้รับเคยได้เฟรมนี้แล้วแต่ ACK หาย ชั้น MAC เห็น sequence number เดิมกับ retry bit จึงทิ้งเฟรมซ้ำ แต่ยังตอบ ACK ให้ใหม่",fields:[["sequence",String(seq)],["retry bit","1"]]});
+        const okA=chOK&&R()<pOK(L.p100,14);
+        push({t:ms(tE+SIFS),src:"R1",dst:"S",lost:!okA,sa:MAC.R1,da:MAC.S,proto:"ACK",step:4,size:14,
+          info:"802.11 ACK"+(okA?"":" / สูญหาย"),
+          note:okA?"ผู้รับตอบ ACK หลังรับเฟรมได้ "+SIFS+" µs (SIFS) งานนี้ทำโดยฮาร์ดแวร์ Wi-Fi ไม่ต้องเขียนโค้ด":"ผู้รับได้ข้อมูลแล้ว แต่ ACK สูญหาย ผู้ส่งจึงเข้าใจว่าส่งไม่สำเร็จและจะส่งซ้ำ",
+          fields:[["Frame Control","0xD4 0x00 (Control / ACK)"],["Receiver Address",MAC.S],["FCS","4 ไบต์"],["ขนาดรวม","14 ไบต์"],["เวลาออกอากาศ",AK.toFixed(0)+" µs"]]});
+        tE=tE+SIFS+AK;
+        if(okA){
+          push({t:ms(tE+40),src:"S",dst:"S",sa:"ESP32 ผู้ส่ง",da:"-",proto:"CB",step:5,size:"-",info:"onSent(): ESP_NOW_SEND_SUCCESS"+(a?" หลังส่ง "+(a+1)+" ครั้ง":""),
+            note:"ESP_NOW_SEND_SUCCESS หมายถึงผู้รับได้เฟรมในชั้น MAC แล้ว ไม่ได้รับประกันว่าโปรแกรมฝั่งผู้รับประมวลผลข้อมูลสำเร็จ ควรรอ callback ก่อนส่งข้อความถัดไป",fields:[["status","ESP_NOW_SEND_SUCCESS"],["จำนวนครั้งที่ส่ง",String(a+1)]]});
+          success=true;break;
+        }
+      }
+      // ack timeout + backoff
+      const bo=Math.floor(R()*(cw+1));cw=Math.min(cw*2+1,1023);
+      t=tE+SIFS+AK+DIFS+bo*SLOT;
+    }
+    if(success)st.ok++;
+    else{st.fail++;const last=P[P.length-1];push({t:last.t+0.05,src:"S",dst:"S",sa:"ESP32 ผู้ส่ง",da:"-",proto:"CB",step:5,size:"-",bad:true,info:"onSent(): ESP_NOW_SEND_FAIL"+(delivered?" (ข้อมูลถึงแล้วแต่ ACK หาย)":""),
+      note:chOK?"ส่งครบจำนวนครั้งแล้วยังไม่ได้ ACK callback จึงรายงาน FAIL สาเหตุที่พบบ่อยคือระยะไกลเกินไป ผู้รับไม่ได้เปิดเครื่อง หรือสัญญาณรบกวน":"สาเหตุคือช่องไม่ตรงกัน ต้องให้ผู้ส่งและผู้รับอยู่ช่องเดียวกัน กรณีผู้ส่งเชื่อม router ด้วย ช่องจะเปลี่ยนตาม router",
+      fields:[["status","ESP_NOW_SEND_FAIL"]]})}
+  }
+  P.sort((a,b)=>a.t-b.t);
+  espStats=st;
+  return P;
+}
+let espStats={};
+function dataFields(seq,retry,da){
+  const enc=lab.enc&&lab.mode==="uni";
+  const f=[["Frame Control","0xD0 "+(enc?"0x40":"0x00")+" (Management / Action"+(enc?", Protected":"")+")"+(retry?" + Retry":"")],
+    ["Address 1 (ปลายทาง)",da],["Address 2 (ต้นทาง)",MAC.S],["Address 3",MAC.B],["Sequence",String(seq)]];
+  if(enc)f.push(["CCMP header","8 ไบต์"]);
+  f.push(["Category","127 (vendor-specific)"],["OUI","18:FE:34 (Espressif)"],["Element ID","221"],["Type","4 (ESP-NOW)"],["Version",String(lab.ver)],["Body",lab.payload+" ไบต์"]);
+  if(enc)f.push(["MIC","8 ไบต์"]);
+  f.push(["ขนาดเฟรมรวม",frameBytes()+" ไบต์"],["เวลาออกอากาศ",airtime(frameBytes(),lab.rate).toFixed(0)+" µs @ "+lab.rate+" Mbps"]);
+  return f;
+}
+
+/* ---------- LoRa time on air (SF7, BW125, CR4/5, preamble 8, explicit header) ---------- */
+function loraToA(pl,crc){const SF=7,BW=125e3,CR=1,H=0,DE=0;const ts=Math.pow(2,SF)/BW*1000;const n=8+Math.max(Math.ceil((8*pl-4*SF+28+16*(crc?1:0)-20*H)/(4*(SF-2*DE)))*(CR+4),0);return (8+4.25)*ts+n*ts}
+
+/* ---------- topics ---------- */
+const TOPICS=[
+{id:"espnow",name:"ESP-NOW",full:"Espressif connectionless protocol",cat:"wireless",sim:true,osi:[2],layer:"ชั้น 2 (Data link) บน 802.11",unit:"ms",
+ overview:"ESP-NOW เป็นโปรโตคอลของ Espressif ที่ให้ ESP32 ส่งข้อมูลหากันโดยตรงผ่านวิทยุ Wi-Fi โดยไม่ต้องเชื่อมต่อ access point ข้อมูลถูกห่ออยู่ใน vendor-specific action frame ของมาตรฐาน 802.11 จึงเริ่มส่งได้ทันทีหลังเปิด Wi-Fi เหมาะกับรีโมตควบคุม เซนเซอร์ไร้สาย และงานที่ต้องการความหน่วงต่ำ",
+ facts:[["การเชื่อมต่อ","ไม่ต้องเชื่อม AP (connectionless)"],["ข้อมูลต่อครั้ง","250 ไบต์ (v1.0) / 1470 ไบต์ (v2.0)"],["จำนวน peer","สูงสุด 20 เข้ารหัสได้ไม่เกิน 17 (ค่าเริ่มต้น 7)"],["ความปลอดภัย","CCMP ด้วย PMK และ LMK ขนาด 16 ไบต์"],["อัตราเริ่มต้น","1 Mbps"],["ช่องสัญญาณ","ผู้ส่งและผู้รับต้องอยู่ช่องเดียวกัน"],["การยืนยัน","ACK ระดับ MAC เฉพาะ unicast"]],
+ steps:[["เริ่มต้น ESP-NOW","ตั้งโหมด STA แล้ว esp_now_init()"],["เพิ่ม peer","ลงทะเบียน MAC ปลายทาง"],["ส่ง action frame","esp_now_send() ส่งข้อมูล"],["MAC ACK","ผู้รับตอบรับระดับฮาร์ดแวร์"],["Callback","แจ้งผลส่งและรับให้โปรแกรม"]],
+ legend:[["API","k3","คำสั่ง API"],["ESP-NOW","k1","Action frame"],["ACK","k2","ACK"],["MAC","k4","MAC"],["CB","k5","Callback"]]},
+
+{id:"wifi",name:"Wi-Fi",full:"IEEE 802.11 Station mode",cat:"wireless",osi:[1,2],layer:"ชั้น 1-2 (PHY / MAC)",unit:"s",
+ overview:"ESP32 เชื่อมต่อ Wi-Fi ในโหมด station เหมือนโทรศัพท์หรือโน้ตบุ๊ก ก่อนส่งข้อมูลได้ต้องผ่านหลายขั้น คือค้นหาเครือข่าย ยืนยันตัวตนและขอเข้าร่วม ทำ 4-way handshake เพื่อสร้างกุญแจเข้ารหัส แล้วขอหมายเลข IP จาก DHCP ทุกขั้นเกิดขึ้นภายในคำสั่ง WiFi.begin() คำสั่งเดียว",
+ facts:[["มาตรฐาน","802.11 b/g/n (ESP32 รุ่นแรก)"],["ย่านความถี่","2.4 GHz"],["ช่องที่ใช้ในไทย","1 ถึง 13"],["ความปลอดภัย","WPA2-PSK, WPA3-SAE"],["โหมด","STA, AP, STA+AP"],["ได้ IP จาก","DHCP ของ router"]],
+ steps:[["Scan","ค้นหาเครือข่ายด้วย probe"],["Auth / Assoc","ขอเข้าร่วมเครือข่าย"],["4-way handshake","สร้างกุญแจ WPA2"],["DHCP","ขอหมายเลข IP"],["พร้อมใช้งาน","หา MAC ของ gateway ด้วย ARP"]],
+ legend:[["MGMT","k3","Management"],["EAPOL","k5","EAPOL"],["DHCP","k1","DHCP"],["ARP","k2","ARP"],["EVENT","k4","Event"]],
+ nodes:[{id:"E",label:"ESP32 (STA)",sub:"24:0A:C4:11:22:33",x:150,y:230,icon:"esp"},{id:"AP",label:"Router / AP",sub:"192.168.1.1  CH 6",x:450,y:150,icon:"router"},{id:"I",label:"Internet",sub:"",x:680,y:270,icon:"cloud",dim:true}],
+ links:[["E","AP","SSID: MyHome"],["AP","I",""]],
+ sizeNote:"ขนาดเฟรมโดยประมาณ",
+ packets:[
+  [0.000,"E","AP","24:0A:C4:11:22:33","FF:FF:FF:FF:FF:FF","MGMT","Probe Request SSID=MyHome",90,1,"ESP32 ส่ง probe request เพื่อถามหาเครือข่ายชื่อ MyHome ไล่ไปทีละช่อง",true],
+  [0.002,"AP","E","02:1A:11:00:00:01","24:0A:C4:11:22:33","MGMT","Probe Response SSID=MyHome, CH 6, RSN WPA2",310,1,"Router ตอบกลับพร้อมข้อมูลช่องสัญญาณ อัตราที่รองรับ และวิธีเข้ารหัส"],
+  [0.105,"E","AP","24:0A:C4:11:22:33","02:1A:11:00:00:01","MGMT","Authentication (Open System) seq=1",30,2,"ขั้น authentication แบบ Open System เป็นเพียงพิธีการ การตรวจรหัสผ่านจริงเกิดใน 4-way handshake"],
+  [0.107,"AP","E","02:1A:11:00:00:01","24:0A:C4:11:22:33","MGMT","Authentication seq=2 status=Success",30,2,"Router ตอบรับขั้น authentication"],
+  [0.110,"E","AP","24:0A:C4:11:22:33","02:1A:11:00:00:01","MGMT","Association Request",130,2,"ESP32 ขอเข้าร่วมเครือข่าย พร้อมแจ้งความสามารถของตัวเอง"],
+  [0.113,"AP","E","02:1A:11:00:00:01","24:0A:C4:11:22:33","MGMT","Association Response AID=1",150,2,"Router รับเข้าเครือข่ายและให้หมายเลข association ID"],
+  [0.120,"AP","E","02:1A:11:00:00:01","24:0A:C4:11:22:33","EAPOL","Key (Message 1 of 4) ANonce",133,3,"Router ส่งตัวเลขสุ่ม ANonce เพื่อเริ่มสร้างกุญแจ"],
+  [0.125,"E","AP","24:0A:C4:11:22:33","02:1A:11:00:00:01","EAPOL","Key (Message 2 of 4) SNonce, MIC",155,3,"ESP32 คำนวณกุญแจจากรหัสผ่านกับตัวเลขสุ่มทั้งสอง แล้วส่ง SNonce พร้อม MIC เพื่อพิสูจน์ว่ารู้รหัสผ่าน"],
+  [0.130,"AP","E","02:1A:11:00:00:01","24:0A:C4:11:22:33","EAPOL","Key (Message 3 of 4) GTK, MIC",189,3,"Router ยืนยันและส่งกุญแจกลุ่ม GTK สำหรับข้อมูล broadcast"],
+  [0.133,"E","AP","24:0A:C4:11:22:33","02:1A:11:00:00:01","EAPOL","Key (Message 4 of 4)",133,3,"ESP32 ยืนยัน จากนี้ข้อมูลทั้งหมดถูกเข้ารหัส"],
+  [0.150,"E","AP","0.0.0.0","255.255.255.255","DHCP","DHCP Discover",350,4,"ESP32 ยังไม่มี IP จึงประกาศหา DHCP server",true],
+  [0.420,"AP","E","192.168.1.1","192.168.1.50","DHCP","DHCP Offer 192.168.1.50",350,4,"DHCP server ใน router เสนอ IP ให้"],
+  [0.425,"E","AP","0.0.0.0","255.255.255.255","DHCP","DHCP Request 192.168.1.50",360,4,"ESP32 ขอใช้ IP ที่ได้รับเสนอ",true],
+  [0.440,"AP","E","192.168.1.1","192.168.1.50","DHCP","DHCP ACK lease 86400 s, GW 192.168.1.1, DNS",350,4,"ได้ IP พร้อม gateway และ DNS ระยะเวลาเช่า 1 วัน"],
+  [0.441,"E","E","ESP32","-","EVENT","IP_EVENT_STA_GOT_IP 192.168.1.50","-",4,"เกิด event ว่าได้ IP แล้ว ฟังก์ชัน WiFi.status() จะคืนค่า WL_CONNECTED"],
+  [0.450,"E","AP","192.168.1.50","FF:FF:FF:FF:FF:FF","ARP","Who has 192.168.1.1? Tell 192.168.1.50",70,5,"ก่อนส่งข้อมูลออกนอกเครือข่าย ต้องรู้ MAC ของ gateway ก่อน",true],
+  [0.452,"AP","E","192.168.1.1","192.168.1.50","ARP","192.168.1.1 is at 02:1A:11:00:00:01",70,5,"Router ตอบ MAC ของตัวเอง ตอนนี้ ESP32 พร้อมส่งข้อมูลแล้ว"]
+ ]},
+
+{id:"ble",name:"BLE",full:"Bluetooth Low Energy",cat:"wireless",osi:[1,2],layer:"Link Layer / L2CAP / ATT / GATT",unit:"s",
+ overview:"Bluetooth Low Energy ออกแบบมาเพื่อใช้พลังงานต่ำ ESP32 มักทำหน้าที่ peripheral ที่โฆษณาตัวเองเป็นระยะ เมื่อโทรศัพท์ซึ่งเป็น central เชื่อมต่อแล้ว ข้อมูลจะถูกจัดเป็น service และ characteristic ตามโครงสร้าง GATT และส่งค่าเซนเซอร์แบบ notify โดยไม่ต้องรอให้ถูกถาม",
+ facts:[["ESP32 รุ่นแรก","Bluetooth 4.2 (Classic + BLE)"],["ESP32-S3 / C3 / C6","Bluetooth 5 (LE)"],["ช่องสัญญาณ","40 ช่อง ช่องละ 2 MHz"],["ช่องโฆษณา","37, 38, 39"],["ข้อมูลโฆษณา","สูงสุด 31 ไบต์ (legacy)"],["ATT MTU เริ่มต้น","23 ไบต์"],["บทบาท","Peripheral / Central, Server / Client"]],
+ steps:[["Advertising","ประกาศตัวบนช่อง 37 38 39"],["Scan","มือถือขอข้อมูลเพิ่ม"],["Connect","สร้างการเชื่อมต่อ"],["GATT discovery","ค้นหา service และเปิด notify"],["Notify","ส่งค่าเซนเซอร์เป็นระยะ"]],
+ legend:[["ADV","k1","Advertising"],["LL","k3","Link Layer"],["ATT","k5","ATT / GATT"]],
+ nodes:[{id:"E",label:"ESP32-Sensor",sub:"Peripheral / GATT server",x:170,y:220,icon:"esp"},{id:"P",label:"โทรศัพท์",sub:"Central / GATT client",x:620,y:200,icon:"phone"}],
+ links:[["E","P","2.4 GHz"]],
+ sizeNote:"ขนาดบนอากาศ รวม preamble, access address, header และ CRC",
+ packets:[
+  [0.0000,"E","P","ESP32-Sensor","Broadcast","ADV","ADV_IND ch37 Flags, UUID 0x181A",23,1,"ESP32 ประกาศตัวบนช่องโฆษณา 37 ว่ามี Environmental Sensing service (0x181A)",true],
+  [0.0004,"E","P","ESP32-Sensor","Broadcast","ADV","ADV_IND ch38",23,1,"ประกาศซ้ำบนช่อง 38",true],
+  [0.0008,"E","P","ESP32-Sensor","Broadcast","ADV","ADV_IND ch39",23,1,"ประกาศซ้ำบนช่อง 39 แล้วรอรอบถัดไปตาม advertising interval",true],
+  [0.1000,"E","P","ESP32-Sensor","Broadcast","ADV","ADV_IND ch37 (รอบถัดไป)",23,2,"รอบโฆษณาถัดไปหลัง 100 ms",true],
+  [0.1002,"P","E","Phone","ESP32-Sensor","ADV","SCAN_REQ ch37",22,2,"โทรศัพท์สนใจจึงขอข้อมูลเพิ่ม (active scan)"],
+  [0.1005,"E","P","ESP32-Sensor","Phone","ADV","SCAN_RSP Name=ESP32-Sensor",30,2,"ESP32 ตอบชื่ออุปกรณ์"],
+  [0.2000,"E","P","ESP32-Sensor","Broadcast","ADV","ADV_IND ch37",23,3,"ประกาศอีกรอบ",true],
+  [0.2002,"P","E","Phone","ESP32-Sensor","LL","CONNECT_IND interval=30 ms, hop",44,3,"ผู้ใช้กดเชื่อมต่อ โทรศัพท์ส่ง CONNECT_IND กำหนด connection interval และลำดับการกระโดดช่อง ESP32 หยุดโฆษณา"],
+  [0.2325,"P","E","Phone","ESP32-Sensor","ATT","Exchange MTU Request (517)",17,4,"เจรจาขนาด MTU ให้ใหญ่กว่า 23 ไบต์"],
+  [0.2626,"E","P","ESP32-Sensor","Phone","ATT","Exchange MTU Response (517)",17,4,"ตกลงขนาด MTU"],
+  [0.2925,"P","E","Phone","ESP32-Sensor","ATT","Read By Group Type Request (Primary Service)",21,4,"ค้นหา service ทั้งหมด"],
+  [0.3225,"E","P","ESP32-Sensor","Phone","ATT","Read By Group Type Response 0x181A",22,4,"พบ Environmental Sensing service ซึ่งมี characteristic Temperature (0x2A6E)"],
+  [0.3525,"P","E","Phone","ESP32-Sensor","ATT","Write Request handle 0x002B = 01 00 (CCCD)",19,4,"เขียนค่า 0x0001 ลงใน CCCD เพื่อเปิดการแจ้งเตือน (notify)"],
+  [0.3825,"E","P","ESP32-Sensor","Phone","ATT","Write Response",15,4,"ยืนยันการเปิด notify"],
+  [1.3825,"E","P","ESP32-Sensor","Phone","ATT","Handle Value Notification 0x002A = 22 0B (28.50 C)",19,5,"ส่งอุณหภูมิ ค่า sint16 หน่วย 0.01 องศา 0x0B22 = 2850 คือ 28.50 องศาเซลเซียส ไม่ต้องรอ ACK ระดับ ATT"],
+  [2.3825,"E","P","ESP32-Sensor","Phone","ATT","Handle Value Notification 0x002A = 2C 0B (28.60 C)",19,5,"ค่าถัดไปหลัง 1 วินาที"]
+ ]},
+
+{id:"lora",name:"LoRa",full:"LoRa / LoRaWAN Class A",cat:"wireless",osi:[1,2],layer:"ชั้น 1 (LoRa) / ชั้น 2 (LoRaWAN MAC)",unit:"s",
+ overview:"LoRa เป็นการมอดูเลตแบบ chirp spread spectrum ที่ส่งได้ไกลระดับกิโลเมตรด้วยพลังงานต่ำ แลกกับอัตราข้อมูลที่ต่ำมาก ESP32 ไม่มีวิทยุ LoRa ในตัว ต้องต่อโมดูลเช่น SX1276 หรือ SX1262 ผ่าน SPI เมื่อใช้ร่วมกับ LoRaWAN อุปกรณ์ Class A จะเปิดหน้าต่างรับข้อมูลสั้น ๆ สองช่วงหลังการส่งแต่ละครั้งเท่านั้น",
+ facts:[["มอดูเลชัน","Chirp Spread Spectrum (CSS)"],["ย่านในไทย","AS923 (920 ถึง 925 MHz)"],["Spreading factor","SF7 ถึง SF12"],["แบนด์วิดท์","125 kHz (ทั่วไป)"],["ฮาร์ดแวร์","โมดูล SX1276 / SX1262 ผ่าน SPI"],["หน้าต่างรับ Class A","RX1 หลัง 1 s, RX2 หลัง 2 s"],["Join Accept","RX1 หลัง 5 s"]],
+ steps:[["Join Request","ขอเข้าร่วมเครือข่าย (OTAA)"],["Join Accept","รับ DevAddr และ session key"],["Uplink","ส่งค่าเซนเซอร์"],["RX1 / RX2","เปิดหน้าต่างรับหลังส่ง"],["Confirmed","ขอให้เครือข่ายตอบ ACK"]],
+ legend:[["LoRa","k1","LoRa uplink"],["LoRa-DN","k2","LoRa downlink"],["UDP","k3","Gateway forward"],["EVENT","k4","Event"]],
+ nodes:[{id:"N",label:"ESP32 + SX1276",sub:"End device Class A",x:130,y:240,icon:"esp"},{id:"G",label:"LoRaWAN Gateway",sub:"923.2 MHz",x:420,y:150,icon:"gw"},{id:"NS",label:"Network Server",sub:"ChirpStack / TTN",x:680,y:250,icon:"server"}],
+ links:[["N","G","ระยะหลายกิโลเมตร"],["G","NS","Internet / UDP 1700"]],
+ sizeNote:"ขนาด PHYPayload ของ LoRaWAN, ToA คำนวณที่ SF7 BW125 CR4/5",
+ packets:[
+  [0.000,"N","G","DevEUI 70B3D5...01","Gateway","LoRa","JoinRequest (OTAA) ToA "+loraToA(23,1).toFixed(1)+" ms",23,1,"อุปกรณ์ส่ง JoinRequest ที่มี JoinEUI, DevEUI และ DevNonce ใช้เวลาบนอากาศราว "+loraToA(23,1).toFixed(0)+" ms ที่ SF7"],
+  [0.070,"G","NS","Gateway","Network Server","UDP","PUSH_DATA (rxpk, RSSI, SNR)",230,1,"Gateway ไม่ถอดรหัสข้อมูล เพียงส่งต่อพร้อมค่า RSSI และ SNR ให้ network server ทาง UDP"],
+  [0.300,"NS","G","Network Server","Gateway","UDP","PULL_RESP JoinAccept (ส่งใน RX1)",200,2,"Network server ตรวจสอบและเตรียม JoinAccept ให้ gateway ส่งในเวลาที่กำหนด"],
+  [5.000,"G","N","Gateway","DevEUI 70B3D5...01","LoRa-DN","JoinAccept DevAddr=26011F2A ToA "+loraToA(17,0).toFixed(1)+" ms",17,2,"ส่งกลับใน RX1 ตรงเวลา 5 วินาทีหลัง JoinRequest อุปกรณ์ต้องเปิดรับในเวลานี้พอดี"],
+  [5.100,"N","N","ESP32","-","EVENT","คำนวณ NwkSKey / AppSKey, joined","-",2,"อุปกรณ์ได้ DevAddr และสร้าง session key ทั้งสองชุด พร้อมส่งข้อมูล"],
+  [10.000,"N","G","26011F2A","Gateway","LoRa","Unconfirmed Data Up FCnt=0 FPort=1 (4 B) ToA "+loraToA(17,1).toFixed(1)+" ms",17,3,"ส่งค่าเซนเซอร์ 4 ไบต์ ส่วนหัว LoRaWAN อีก 13 ไบต์"],
+  [10.070,"G","NS","Gateway","Network Server","UDP","PUSH_DATA (uplink)",220,3,"Gateway ส่งต่อ ข้อมูลอาจถึงหลาย gateway พร้อมกัน network server จะตัดตัวซ้ำออก"],
+  [11.000,"N","N","ESP32","-","EVENT","RX1 เปิด (ช่องเดียวกับ uplink) ไม่มีข้อมูล","-",4,"1 วินาทีหลังส่ง อุปกรณ์เปิดรับสั้น ๆ ไม่มีข้อมูลจึงปิดวิทยุ"],
+  [12.000,"N","N","ESP32","-","EVENT","RX2 เปิด 923.2 MHz SF10 ไม่มีข้อมูล","-",4,"2 วินาทีหลังส่ง เปิดรับอีกครั้งที่ความถี่ RX2 ของ AS923 นอกจากสองช่วงนี้ อุปกรณ์ Class A รับข้อมูลไม่ได้"],
+  [20.000,"N","G","26011F2A","Gateway","LoRa","Confirmed Data Up FCnt=1 FPort=1 (4 B)",17,5,"ส่งแบบ confirmed เพื่อขอให้เครือข่ายตอบรับ"],
+  [20.070,"G","NS","Gateway","Network Server","UDP","PUSH_DATA (uplink)",220,5,"ส่งต่อให้ network server"],
+  [20.400,"NS","G","Network Server","Gateway","UDP","PULL_RESP downlink ACK",190,5,"Network server สั่งส่ง ACK ใน RX1"],
+  [21.000,"G","N","Gateway","26011F2A","LoRa-DN","Unconfirmed Data Down ACK=1 ToA "+loraToA(12,0).toFixed(1)+" ms",12,5,"ACK มาถึงใน RX1 ตรง 1 วินาทีหลังส่ง ควรใช้ confirmed เท่าที่จำเป็น เพราะ gateway ต้องหยุดฟังขณะส่ง downlink"]
+ ]},
+
+{id:"mqtt",name:"MQTT",full:"Message Queuing Telemetry Transport",cat:"iot",osi:[7],layer:"ชั้น 7 (Application) บน TCP",unit:"s",
+ overview:"MQTT เป็นโปรโตคอลแบบ publish / subscribe ที่นิยมที่สุดในงาน IoT อุปกรณ์ไม่ได้ส่งข้อมูลหากันโดยตรง แต่ส่งผ่าน broker ผู้ส่ง publish ข้อมูลลง topic ส่วนผู้ที่ subscribe topic นั้นจะได้รับข้อมูลทันที ESP32 ใช้ Wi-Fi และ TCP เป็นพื้นฐาน",
+ facts:[["มาตรฐาน","OASIS MQTT 3.1.1 / 5.0"],["พอร์ต","1883 (8883 เมื่อใช้ TLS)"],["Transport","TCP"],["QoS","0, 1, 2"],["รูปแบบ","Publish / Subscribe ผ่าน broker"],["Keep alive","PINGREQ เมื่อไม่มีการส่งครบกำหนด"],["ไลบรารี Arduino","PubSubClient (publish ได้ QoS 0)"]],
+ steps:[["TCP connect","3-way handshake"],["CONNECT","เข้าสู่ระบบ broker"],["SUBSCRIBE","Dashboard สมัครรับ topic"],["PUBLISH","ESP32 ส่งค่าเซนเซอร์"],["Keep alive","PINGREQ / PINGRESP"]],
+ legend:[["TCP","k2","TCP"],["MQTT","k1","MQTT"],["MQTT-S","k5","Subscribe"]],
+ nodes:[{id:"E",label:"ESP32 client",sub:"192.168.1.50",x:130,y:220,icon:"esp"},{id:"B",label:"MQTT Broker",sub:"192.168.1.20:1883",x:420,y:130,icon:"server"},{id:"D",label:"Dashboard",sub:"192.168.1.30 (Node-RED)",x:680,y:250,icon:"dash"}],
+ links:[["E","B","Wi-Fi / TCP"],["B","D","TCP"]],
+ sizeNote:"TCP: IP+TCP header, MQTT: ขนาดในชั้น MQTT",
+ packets:[
+  [0.000,"E","B","192.168.1.50","192.168.1.20","TCP","52344 > 1883 [SYN] Seq=0",44,1,"เริ่มเชื่อม TCP ไปยัง broker พอร์ต 1883"],
+  [0.003,"B","E","192.168.1.20","192.168.1.50","TCP","1883 > 52344 [SYN, ACK] Seq=0 Ack=1",44,1,"Broker ตอบรับ"],
+  [0.004,"E","B","192.168.1.50","192.168.1.20","TCP","52344 > 1883 [ACK] Seq=1 Ack=1",40,1,"การเชื่อมต่อ TCP พร้อมใช้งาน"],
+  [0.006,"E","B","192.168.1.50","192.168.1.20","MQTT","CONNECT clientId=esp32-room1 keepAlive=15",25,2,"ESP32 แนะนำตัวด้วย client ID และกำหนด keep alive 15 วินาที"],
+  [0.009,"B","E","192.168.1.20","192.168.1.50","MQTT","CONNACK rc=0 (Accepted)",4,2,"Broker ยอมรับการเชื่อมต่อ"],
+  [0.500,"D","B","192.168.1.30","192.168.1.20","MQTT-S","SUBSCRIBE id=1 room1/temp QoS 1",17,3,"Dashboard (เชื่อม broker ไว้แล้ว) สมัครรับ topic room1/temp"],
+  [0.502,"B","D","192.168.1.20","192.168.1.30","MQTT-S","SUBACK id=1 granted QoS 1",5,3,"Broker ยืนยัน"],
+  [1.000,"E","B","192.168.1.50","192.168.1.20","MQTT","PUBLISH room1/temp \"28.5\" QoS 0",18,4,"ESP32 publish ค่าอุณหภูมิ แบบ QoS 0 จึงไม่มี PUBACK ตอบกลับ"],
+  [1.002,"B","D","192.168.1.20","192.168.1.30","MQTT","PUBLISH room1/temp \"28.5\" QoS 0",18,4,"Broker ส่งต่อให้ผู้ subscribe ด้วย QoS ที่ต่ำกว่าระหว่างของผู้ส่งกับของผู้รับ จึงเป็น QoS 0"],
+  [16.000,"E","B","192.168.1.50","192.168.1.20","MQTT","PINGREQ",2,5,"ไม่มีข้อมูลส่งครบ keep alive จึงส่ง PINGREQ เพื่อบอกว่ายังเชื่อมต่ออยู่"],
+  [16.003,"B","E","192.168.1.20","192.168.1.50","MQTT","PINGRESP",2,5,"Broker ตอบกลับ ถ้าไม่ได้คำตอบ client จะถือว่าการเชื่อมต่อขาด"]
+ ]}
+];
+// expand static packet tuples
+TOPICS.forEach(T=>{if(!T.packets)return;T.packets=T.packets.map(a=>({t:a[0],src:a[1],dst:a[2],sa:a[3],da:a[4],proto:a[5],info:a[6],size:a[7],step:a[8],note:a[9],bcast:!!a[10]}))});
+
+/* ---------- code ---------- */
+const hex=m=>m.split(":").map(x=>"0x"+x).join(",");
+function espCode(side){
+  const bc=lab.mode==="bcast",enc=lab.enc&&!bc;const L=[];const a=(t,s)=>L.push([t,s||[]]);
+  if(side==="tx"){
+    a("#include <WiFi.h>",[1]);a("#include <esp_now.h>",[1]);a("");
+    a("uint8_t peerMac[] = {"+hex(bc?MAC.B:MAC.R1)+"};"+(bc?"  // broadcast":"  // MAC ผู้รับ"),[2]);
+    if(enc)a("const uint8_t LMK[16] = {0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F};",[2]);
+    a("uint8_t payload["+lab.payload+"];  // ข้อมูล "+lab.payload+" ไบต์",[3]);a("");
+    a("// Arduino-ESP32 3.3 ขึ้นไป ใช้ wifi_tx_info_t",[5]);
+    a("// รุ่นก่อนหน้าใช้ (const uint8_t *mac_addr, esp_now_send_status_t status)",[5]);
+    a("void onSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {",[5]);
+    a("  Serial.println(status == ESP_NOW_SEND_SUCCESS ? \"SUCCESS\" : \"FAIL\");",[5]);a("}",[5]);a("");
+    a("void setup() {");a("  Serial.begin(115200);");
+    a("  WiFi.mode(WIFI_STA);              // เปิดวิทยุ Wi-Fi โหมด station",[1]);
+    a("  esp_now_init();",[1]);a("  esp_now_register_send_cb(onSent);",[5]);a("");
+    a("  esp_now_peer_info_t peer = {};",[2]);a("  memcpy(peer.peer_addr, peerMac, 6);",[2]);
+    a("  peer.channel = 0;                 // 0 = ใช้ช่องปัจจุบัน",[2]);
+    if(enc){a("  peer.encrypt = true;",[2]);a("  memcpy(peer.lmk, LMK, 16);",[2])}else a("  peer.encrypt = false;",[2]);
+    a("  esp_now_add_peer(&peer);",[2]);a("}");a("");
+    a("void loop() {");a("  esp_now_send(peerMac, payload, sizeof(payload));",[3]);
+    a(bc?"  // broadcast ไม่มี ACK กลับ":"  // ACK ระดับ MAC ทำโดยฮาร์ดแวร์ ไม่ต้องเขียนโค้ด",[4]);
+    a("  delay(1000);",[3]);a("}");
+  }else{
+    a("#include <WiFi.h>",[1]);a("#include <esp_now.h>",[1]);if(lab.rxch!==1)a("#include <esp_wifi.h>",[1]);a("");
+    if(enc){a("uint8_t senderMac[] = {"+hex(MAC.S)+"};",[2]);a("const uint8_t LMK[16] = {0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F};",[2]);a("")}
+    a("void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {",[5]);
+    a("  Serial.printf(\"recv %d bytes, RSSI %d\\n\", len, info->rx_ctrl->rssi);",[5]);a("}",[5]);a("");
+    a("void setup() {");a("  Serial.begin(115200);");a("  WiFi.mode(WIFI_STA);",[1]);
+    if(lab.rxch!==1)a("  esp_wifi_set_channel("+lab.rxch+", WIFI_SECOND_CHAN_NONE);  // ไม่ตรงกับผู้ส่ง (CH 1)",[1]);
+    a("  esp_now_init();",[1]);a("  esp_now_register_recv_cb(onRecv);",[5]);
+    if(enc){a("");a("  esp_now_peer_info_t peer = {};",[2]);a("  memcpy(peer.peer_addr, senderMac, 6);",[2]);a("  peer.encrypt = true;",[2]);a("  memcpy(peer.lmk, LMK, 16);",[2]);a("  esp_now_add_peer(&peer);",[2])}
+    a("}");a("");a("void loop() {");a(bc?"  // broadcast: ผู้รับไม่ตอบ ACK":"  // ACK ตอบกลับอัตโนมัติโดยฮาร์ดแวร์",[4]);a("}");
+  }
+  return L;
+}
+const CODE={
+ wifi:[["#include <WiFi.h>",[1]],["",[]],["void setup() {",[]],["  Serial.begin(115200);",[]],["  WiFi.mode(WIFI_STA);",[1]],["  WiFi.begin(\"MyHome\", \"password\");   // scan, auth, assoc, 4-way, DHCP",[1,2,3,4]],["  while (WiFi.status() != WL_CONNECTED) {",[2,3,4]],["    delay(200);",[2,3,4]],["  }",[4]],["  Serial.println(WiFi.localIP());      // 192.168.1.50",[4]],["  Serial.println(WiFi.RSSI());",[5]],["}",[]],["",[]],["void loop() {}",[5]]],
+ ble:[["#include <BLEDevice.h>",[1]],["#include <BLEServer.h>",[3]],["#include <BLE2902.h>",[4]],["",[]],["BLECharacteristic *tempChar;",[4]],["",[]],["void setup() {",[]],["  BLEDevice::init(\"ESP32-Sensor\");",[1,2]],["  BLEServer *server = BLEDevice::createServer();",[3]],["  BLEService *svc = server->createService(BLEUUID((uint16_t)0x181A));",[4]],["  tempChar = svc->createCharacteristic(BLEUUID((uint16_t)0x2A6E),",[4]],["      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);",[4]],["  tempChar->addDescriptor(new BLE2902());   // CCCD สำหรับเปิด notify",[4]],["  svc->start();",[4]],["  BLEDevice::getAdvertising()->addServiceUUID(BLEUUID((uint16_t)0x181A));",[1]],["  BLEDevice::startAdvertising();",[1,2]],["}",[]],["",[]],["void loop() {",[]],["  int16_t t = 2850;                     // 28.50 องศา หน่วย 0.01",[5]],["  tempChar->setValue((uint8_t*)&t, 2);",[5]],["  tempChar->notify();",[5]],["  delay(1000);",[5]],["}",[]]],
+ lora:[["// ตัวอย่างแนว RadioLib 7.x กับบอร์ด ESP32 + SX1276",[]],["#include <RadioLib.h>",[1]],["",[]],["SX1276 radio = new Module(18, 26, 14, 33);  // NSS, DIO0, RST, DIO1",[1]],["LoRaWANNode node(&radio, &AS923);",[1]],["uint64_t joinEUI = 0, devEUI = 0x70B3D57ED0000001;",[1]],["uint8_t appKey[16] = { /* จาก network server */ };",[1]],["uint8_t nwkKey[16] = { /* จาก network server */ };",[1]],["",[]],["void setup() {",[]],["  radio.begin();",[1]],["  node.beginOTAA(joinEUI, devEUI, nwkKey, appKey);",[1]],["  node.activateOTAA();          // JoinRequest แล้วรอ JoinAccept",[1,2]],["}",[]],["",[]],["void loop() {",[]],["  uint8_t data[4] = {0x0B, 0x22, 0x00, 0x41};",[3]],["  node.sendReceive(data, sizeof(data), 1);   // ส่งแล้วเปิด RX1 / RX2",[3,4,5]],["  delay(600000);                // ส่งทุก 10 นาที เคารพ duty cycle",[3]],["}",[]]],
+ mqtt:[["#include <WiFi.h>",[1]],["#include <PubSubClient.h>",[2]],["",[]],["WiFiClient net;",[1]],["PubSubClient mqtt(net);",[2]],["unsigned long last = 0;",[4]],["",[]],["void setup() {",[]],["  WiFi.begin(\"MyHome\", \"password\");",[1]],["  while (WiFi.status() != WL_CONNECTED) delay(200);",[1]],["  mqtt.setServer(\"192.168.1.20\", 1883);",[1]],["  mqtt.setKeepAlive(15);",[2,5]],["}",[]],["",[]],["void loop() {",[]],["  if (!mqtt.connected()) mqtt.connect(\"esp32-room1\");   // TCP + CONNECT",[1,2]],["  mqtt.loop();                          // รับข้อมูลและส่ง PINGREQ",[5]],["  if (millis() - last > 30000) {",[4]],["    last = millis();",[4]],["    mqtt.publish(\"room1/temp\", \"28.5\");  // QoS 0",[4]],["  }",[4]],["}",[]]]
+};
+function hlLine(s){
+  let code=s,com="";const i=s.indexOf("//");
+  if(i>=0&&!/"[^"]*\/\/[^"]*"/.test(s.slice(0,i+2))){code=s.slice(0,i);com=s.slice(i)}
+  let h=esc(code)
+    .replace(/(&quot;.*?&quot;)/g,'<span class="c-s">$1</span>')
+    .replace(/(^|[^\w])(#include|void|int|int16_t|uint8_t|uint64_t|const|if|while|return|unsigned|long|true|false)(?=[^\w]|$)/g,'$1<span class="c-k">$2</span>')
+    .replace(/(^|[^\w#])(0x[0-9A-Fa-f]+|\d+)(?=[^\w]|$)/g,'$1<span class="c-n">$2</span>');
+  if(com)h+='<span class="c-c">'+esc(com)+"</span>";
+  return h||" ";
+}
+
+/* ---------- state ---------- */
+const S={topic:store.get("esp32lab.topic","espnow"),idx:-1,playing:false,view:"net",tab:"ov",side:"tx",cat:"all",sel:null,tok:0};
+let done=store.get("esp32lab.done",[]);
+let packets=[];
+const T=()=>TOPICS.find(t=>t.id===S.topic)||TOPICS[0];
+const nodesOf=t=>t.id==="espnow"?espNodes():t.nodes;
+const linksOf=t=>t.id==="espnow"?espLinks():t.links;
+const colorOf=(t,p)=>{if(p.bad)return"var(--bad)";const l=t.legend.find(x=>x[0]===p.proto);return l?"var(--"+l[1]+")":"var(--muted)"};
+function rebuild(){const t=T();packets=t.id==="espnow"?espPackets():t.packets;}
+
+/* ---------- icons ---------- */
+function icon(kind){
+  const s='stroke="var(--copper)" stroke-width="1.6" fill="var(--panel2)"';
+  switch(kind){
+   case"esp":return `<rect x="-40" y="-24" width="80" height="48" rx="3" ${s}/>`+
+     Array.from({length:9},(_,i)=>`<rect x="${-34+i*8}" y="-28" width="3" height="6" fill="var(--muted)"/><rect x="${-34+i*8}" y="22" width="3" height="6" fill="var(--muted)"/>`).join("")+
+     `<rect x="-18" y="-15" width="30" height="30" fill="var(--panel)" stroke="var(--muted)" stroke-width="1.2"/><text x="-3" y="4" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="var(--muted)">ESP32</text>`+
+     `<path d="M18 -15h12v5h-8v5h8v5h-8v5h8v5" fill="none" stroke="var(--copper)" stroke-width="1.4"/><rect x="-46" y="-6" width="8" height="12" fill="var(--muted)"/>`;
+   case"router":return `<rect x="-36" y="-10" width="72" height="22" rx="3" ${s}/><path d="M-24 -10v-20M24 -10v-20" stroke="var(--copper)" stroke-width="1.6"/>`+[0,1,2,3].map(i=>`<circle cx="${-20+i*9}" cy="1" r="2" fill="var(--k2)"/>`).join("");
+   case"phone":return `<rect x="-17" y="-30" width="34" height="60" rx="5" ${s}/><rect x="-12" y="-23" width="24" height="40" fill="var(--panel)" stroke="var(--muted)"/><circle cx="0" cy="23" r="2.5" fill="var(--muted)"/>`;
+   case"server":return [0,1,2].map(i=>`<rect x="-30" y="${-28+i*19}" width="60" height="16" rx="2" ${s}/><circle cx="-20" cy="${-20+i*19}" r="2" fill="var(--k2)"/><path d="M-8 ${-20+i*19}h28" stroke="var(--muted)"/>`).join("");
+   case"gw":return `<path d="M0 -34L-18 22M0 -34L18 22M-12 0h24M-15 12h30" fill="none" stroke="var(--copper)" stroke-width="1.6"/><path d="M-14 -38a20 20 0 0 1 28 0M-22 -46a32 32 0 0 1 44 0" fill="none" stroke="var(--muted)" stroke-width="1.4"/><rect x="-22" y="22" width="44" height="10" ${s}/>`;
+   case"cloud":return `<path d="M-38 16a16 16 0 0 1 4-30a22 22 0 0 1 40-6a18 18 0 0 1 30 18a14 14 0 0 1-4 18z" ${s}/>`;
+   case"dash":return `<rect x="-36" y="-26" width="72" height="44" rx="3" ${s}/><path d="M-26 8l12-12l10 8l14-16l14 10" fill="none" stroke="var(--k1)" stroke-width="1.8"/><path d="M-10 18v8h20v-8" fill="none" stroke="var(--copper)" stroke-width="1.6"/>`;
+  }
+  return "";
+}
+
+/* ---------- render: network ---------- */
+function drawNet(){
+  const t=T(),ns=nodesOf(t),ls=linksOf(t);const N=Object.fromEntries(ns.map(n=>[n.id,n]));
+  let h='<defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs>';
+  ls.forEach(([a,b,lbl])=>{const A=N[a],B=N[b];if(!A||!B)return;const mx=(A.x+B.x)/2,my=(A.y+B.y)/2;
+    h+=`<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="var(--line2)" stroke-width="1.5" stroke-dasharray="5 6"/>`;
+    if(lbl)h+=`<text x="${mx}" y="${my-10}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="var(--muted)">${esc(lbl)}</text>`});
+  ns.forEach(n=>{h+=`<g transform="translate(${n.x},${n.y})" opacity="${n.dim?0.45:1}" id="node-${n.id}"><circle class="halo" r="54" fill="none" stroke="var(--copper)" stroke-width="2" opacity="0"/>${icon(n.icon)}`+
+    `<text y="52" text-anchor="middle" font-family="Chakra Petch,sans-serif" font-weight="600" font-size="15" fill="var(--fg)">${esc(n.label)}</text>`+
+    `<text y="68" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="var(--muted)">${esc(n.sub)}</text></g>`});
+  if(t.id==="espnow"){const ap=N.AP;h+=`<path d="M${ap.x-40} ${ap.y-36}L${ap.x+40} ${ap.y+30}" stroke="var(--bad)" stroke-width="2" opacity=".6"/>`}
+  h+='<g id="pk"></g>';
+  $("#net").innerHTML=h;
+  $("#net").dataset.topic=t.id;
+}
+function nodePos(id){const n=nodesOf(T()).find(x=>x.id===id);return n?[n.x,n.y]:[400,190]}
+function cross(x,y){return `<g stroke="var(--bad)" stroke-width="3" stroke-linecap="round"><path d="M${x-7} ${y-7}L${x+7} ${y+7}M${x+7} ${y-7}L${x-7} ${y+7}"/></g>`}
+function halo(id,color){const g=document.querySelector("#node-"+id+" .halo");if(!g)return;g.setAttribute("stroke",color);g.style.transition="none";g.setAttribute("opacity","0.9");requestAnimationFrame(()=>{g.style.transition="opacity .9s";g.setAttribute("opacity","0")})}
+function animate(p,dur,tok){
+  return new Promise(res=>{
+    const t=T(),g=$("#pk");if(!g){res();return}
+    const col=colorOf(t,p);g.innerHTML="";
+    const fin=()=>{res()};
+    if(p.src===p.dst){halo(p.src,col);if(reduced||S.view!=="net"){fin();return}
+      const [x,y]=nodePos(p.src);const c=document.createElementNS("http://www.w3.org/2000/svg","circle");c.setAttribute("cx",x);c.setAttribute("cy",y);c.setAttribute("fill","none");c.setAttribute("stroke",col);c.setAttribute("stroke-width","3");g.appendChild(c);
+      const st=performance.now();(function f(n){if(tok!==S.tok){g.innerHTML="";return res()}const u=Math.min((n-st)/dur,1);c.setAttribute("r",30+40*u);c.setAttribute("opacity",1-u);if(u<1)requestAnimationFrame(f);else{g.innerHTML="";fin()}})(st);return}
+    const tg=Array.isArray(p.dst)?p.dst:[p.dst];const [x0,y0]=nodePos(p.src);
+    if(reduced||S.view!=="net"){tg.forEach(d=>{if(!(p.lost||(p.lostTo||[]).includes(d)))halo(d,col)});fin();return}
+    const items=tg.map(d=>{const [x1,y1]=nodePos(d);const lost=p.lost||(p.lostTo||[]).includes(d);
+      const gl=document.createElementNS("http://www.w3.org/2000/svg","circle");gl.setAttribute("r","13");gl.setAttribute("fill",col);gl.setAttribute("opacity",".35");gl.setAttribute("filter","url(#glow)");
+      const c=document.createElementNS("http://www.w3.org/2000/svg","circle");c.setAttribute("r","7");c.setAttribute("fill",col);c.setAttribute("stroke","var(--bg)");c.setAttribute("stroke-width","2");
+      g.appendChild(gl);g.appendChild(c);return{x1,y1,lost,c,gl,d,x:false}});
+    if(p.bcast&&!Array.isArray(p.dst)){const r=document.createElementNS("http://www.w3.org/2000/svg","circle");r.setAttribute("cx",x0);r.setAttribute("cy",y0);r.setAttribute("fill","none");r.setAttribute("stroke",col);r.setAttribute("stroke-width","1.5");g.appendChild(r);items.push({ring:r})}
+    if(Array.isArray(p.dst)){const r=document.createElementNS("http://www.w3.org/2000/svg","circle");r.setAttribute("cx",x0);r.setAttribute("cy",y0);r.setAttribute("fill","none");r.setAttribute("stroke",col);r.setAttribute("stroke-width","1.5");g.appendChild(r);items.push({ring:r})}
+    const st=performance.now();
+    (function f(n){
+      if(tok!==S.tok){g.innerHTML="";return res()}
+      const u=Math.min((n-st)/dur,1),e=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+      items.forEach(it=>{
+        if(it.ring){it.ring.setAttribute("r",20+520*u);it.ring.setAttribute("opacity",.6*(1-u));return}
+        const k=it.lost?Math.min(e,0.58):e;const x=x0+(it.x1-x0)*k,y=y0+(it.y1-y0)*k;
+        [it.c,it.gl].forEach(c=>{c.setAttribute("cx",x);c.setAttribute("cy",y)});
+        if(it.lost&&e>=0.58){if(!it.x){it.x=true;g.insertAdjacentHTML("beforeend",cross(x,y-18))}const o=Math.max(0,1-(e-.58)/.42);it.c.setAttribute("opacity",o);it.gl.setAttribute("opacity",.35*o)}
+      });
+      if(u<1)requestAnimationFrame(f);else{items.forEach(it=>{if(it.d&&!it.lost)halo(it.d,col)});setTimeout(()=>{if(tok===S.tok)g.innerHTML=""},250);fin()}
+    })(st);
+  });
+}
+
+/* ---------- render: sequence ---------- */
+function drawSeq(){
+  const t=T(),ns=nodesOf(t).filter(n=>!n.dim||packets.some(p=>p.src===n.id||p.dst===n.id));
+  const W=Math.max(720,ns.length*190),pad=110,step=ns.length>1?(W-pad*2)/(ns.length-1):0;
+  const X=Object.fromEntries(ns.map((n,i)=>[n.id,pad+i*step]));
+  const show=packets.slice(0,S.idx+1),RH=34,H=80+Math.max(show.length,1)*RH+30;
+  let h=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;min-width:${W}px"><defs>`+
+    t.legend.map(l=>`<marker id="ar-${l[1]}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--${l[1]})"/></marker>`).join("")+
+    `<marker id="ar-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--bad)"/></marker></defs>`;
+  ns.forEach(n=>{h+=`<text x="${X[n.id]}" y="26" text-anchor="middle" font-family="Chakra Petch,sans-serif" font-weight="600" font-size="14" fill="var(--fg)">${esc(n.label)}</text><line x1="${X[n.id]}" y1="40" x2="${X[n.id]}" y2="${H-10}" stroke="var(--line2)" stroke-dasharray="4 5"/>`});
+  if(!show.length)h+=`<text x="${W/2}" y="90" text-anchor="middle" font-size="13" fill="var(--muted)">กด PLAY หรือ STEP เพื่อเริ่มวาดลำดับเหตุการณ์</text>`;
+  show.forEach((p,i)=>{
+    const y=70+i*RH,cur=i===S.idx,l=t.legend.find(x=>x[0]===p.proto),ck=p.bad?"bad":(l?l[1]:"k3"),col="var(--"+ck+")",op=cur?1:.75;
+    const lbl=(p.info.length>46?p.info.slice(0,44)+"..":p.info);
+    h+=`<text x="8" y="${y+4}" font-family="JetBrains Mono,monospace" font-size="10" fill="var(--faint)">${fmtT(p.t,t.unit)}</text>`;
+    if(p.src===p.dst||X[p.dst]===undefined&&!Array.isArray(p.dst)){const x=X[p.src];h+=`<rect x="${x-60}" y="${y-11}" width="120" height="20" fill="var(--panel2)" stroke="${col}" opacity="${op}"/><text x="${x}" y="${y+3}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9.5" fill="var(--fg)">${esc(p.proto+" "+(p.info.length>18?p.info.slice(0,17)+"..":p.info))}</text>`;return}
+    const tg=Array.isArray(p.dst)?p.dst:[p.dst];
+    tg.forEach((d,j)=>{const x0=X[p.src],x1=X[d];if(x1===undefined)return;const lost=p.lost||(p.lostTo||[]).includes(d);const xe=lost?x0+(x1-x0)*.6:x1;
+      h+=`<line x1="${x0}" y1="${y+j*6}" x2="${xe}" y2="${y+j*6}" stroke="${lost?"var(--bad)":col}" stroke-width="${cur?2.4:1.6}" opacity="${op}" ${lost?"":`marker-end="url(#ar-${ck})"`}/>`;
+      if(lost)h+=cross(xe,y+j*6)});
+    const x0=X[p.src],x1=X[tg[0]]??x0;
+    h+=`<text x="${(x0+x1)/2}" y="${y-5}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="${cur?"var(--fg)":"var(--muted)"}">${esc(lbl)}</text>`;
+  });
+  h+="</svg>";$("#seqWrap").innerHTML=h;
+  const w=$("#seqWrap");w.scrollTop=Math.max(0,70+S.idx*RH-w.clientHeight+60);
+}
+
+/* ---------- render: frame ---------- */
+function drawFrame(){
+  const enc=lab.enc&&lab.mode==="uni",el=elements();
+  const F=[["MAC Header",24,"hdr","FC, Duration, Addr1-3, Seq"]];
+  if(enc)F.push(["CCMP Hdr",8,"sec","PN สำหรับเข้ารหัส"]);
+  F.push(["Category",1,"esp","127"],["OUI",3,"esp","18:FE:34"],["Random",4,"esp","กันการเล่นซ้ำ"]);
+  F.push([el>1?"Element hdr x"+el:"Element hdr",7*el,"esp","ID 221, Len, OUI, Type 4, Ver "+lab.ver]);
+  F.push(["Body",lab.payload,"body","ข้อมูลของผู้ใช้"]);
+  if(enc)F.push(["MIC",8,"sec","ตรวจความถูกต้อง"]);
+  F.push(["FCS",4,"fcs","CRC-32"]);
+  const tot=frameBytes();
+  let h='<div class="lbl" style="margin-bottom:8px">Vendor-specific action frame ตามค่าที่ตั้งในแผงจำลอง</div><div class="fbar">'+
+    F.map(f=>`<div class="${f[2]}" style="flex:${Math.max(f[1],3)} 1 0"><b>${f[1]} B</b>${esc(f[0])}</div>`).join("")+"</div>";
+  h+=`<div class="ftotal">ขนาดรวม ${tot} ไบต์ / ส่วนหัวและท้าย ${tot-lab.payload} ไบต์ (${(100*(tot-lab.payload)/tot).toFixed(0)}%) / ออกอากาศ ${airtime(tot,lab.rate).toFixed(0)} µs ที่ ${lab.rate} Mbps</div>`;
+  const rows=[["Frame Control","2","0xD0 "+(enc?"0x40":"0x00"),"Type = Management, Subtype = Action"+(enc?", Protected = 1":"")],["Duration","2","-","เวลาที่จองช่องสัญญาณ"],["Address 1","6",lab.mode==="bcast"?MAC.B:MAC.R1,"ปลายทาง"],["Address 2","6",MAC.S,"ต้นทาง"],["Address 3","6",MAC.B,"ESP-NOW กำหนดเป็น broadcast เสมอ (FromDS = ToDS = 0)"],["Sequence Control","2","-","ใช้ตัดเฟรมซ้ำตอนส่งซ้ำ"]]
+    .concat(enc?[["CCMP Header","8","PN","packet number กันการเล่นซ้ำ"]]:[])
+    .concat([["Category Code","1","127","vendor-specific"],["Organization Identifier","3","18:FE:34","3 ไบต์แรกของ MAC ที่ Espressif ได้รับ"],["Random Values","4","-","ป้องกัน relay attack"],["Element ID","1","221","vendor-specific element"],["Length","1",String(Math.min(5+lab.payload,255))+(el>1?" (ต่อ element)":""),"ความยาว OUI + Type + Version + Body สูงสุด 255"],["OUI","3","18:FE:34",""],["Type","1","4","ESP-NOW"],["Version","1",String(lab.ver),lab.ver===2?"v2.0 ส่งได้ถึง 1470 ไบต์ แบ่งเป็นหลาย element":"v1.0 ส่งได้ถึง 250 ไบต์"],["Body",String(lab.payload),"ข้อมูล",""]])
+    .concat(enc?[["MIC","8","-","Message Integrity Code ของ CCMP"]]:[]).concat([["FCS","4","CRC-32","ตรวจความผิดพลาดของทั้งเฟรม"]]);
+  h+='<table class="ftable"><thead><tr><th>ฟิลด์</th><th>ไบต์</th><th>ค่า</th><th>ความหมาย</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${r[1]}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join("")+"</tbody></table>";
+  $("#frameWrap").innerHTML=h;
+}
+
+/* ---------- render: panels ---------- */
+const fmtT=(v,u)=>u==="ms"?v.toFixed(3)+" ms":v.toFixed(3)+" s";
+function renderHeader(){
+  const t=T();$("#nowName").textContent=t.name;$("#nowSub").textContent=t.full+" / "+t.steps.length+" ขั้นตอน";
+  $("#osi").innerHTML=[1,2,3,4,5,6,7].map(i=>`<span class="${t.osi.includes(i)?"on":""}">${i}</span>`).join("");
+  const n=done.filter(id=>TOPICS.some(x=>x.id===id)).length;
+  $("#progBar").innerHTML=TOPICS.map(x=>`<i class="${done.includes(x.id)?"on":""}"></i>`).join("");
+  $("#progPct").textContent=Math.round(100*n/TOPICS.length)+"%";$("#progTxt").textContent=n+" / "+TOPICS.length+" หัวข้อ";
+}
+function renderCats(){
+  const c=[["all","ทั้งหมด",TOPICS.length],["wireless","ไร้สาย",TOPICS.filter(t=>t.cat==="wireless").length],["iot","IoT",TOPICS.filter(t=>t.cat==="iot").length]];
+  $("#cats").innerHTML=c.map(x=>`<button role="tab" data-c="${x[0]}" aria-selected="${S.cat===x[0]}">${x[1]}<em>${x[2]}</em></button>`).join("");
+}
+function curStep(){return S.idx>=0&&packets[S.idx]?packets[S.idx].step:0}
+function renderTopics(){
+  const cs=curStep();
+  $("#tlist").innerHTML=TOPICS.filter(t=>S.cat==="all"||t.cat===S.cat).map(t=>{
+    const a=t.id===S.topic;
+    return `<li class="titem${a?" active":""}"><button data-t="${t.id}" aria-expanded="${a}"><span class="dot${done.includes(t.id)?" done":""}"></span><span><span class="tname">${esc(t.name)}</span><br><span class="tsub">${esc(t.full)}</span></span>${t.sim?'<span class="tag sim">SIM</span>':'<span class="tag">'+t.steps.length+' ขั้น</span>'}</button>`+
+      (a?`<ol class="steps">${t.steps.map((s,i)=>`<li class="${cs===i+1?"cur":(cs>i+1?"past":"")}"><span class="n">${i+1}</span><span><b>${esc(s[0])}</b><span>${esc(s[1])}</span></span></li>`).join("")}</ol>`:"")+"</li>";
+  }).join("");
+}
+function renderOverview(){
+  const t=T();
+  $("#ov").innerHTML=`<div class="ov-h"><h4>${esc(t.name)}</h4>${t.sim?'<span class="tag sim">จำลองได้</span>':'<span class="tag">ภาพรวม</span>'}</div><div class="full">${esc(t.full)}</div><p>${esc(t.overview)}</p>`+
+    `<table class="facts"><tbody><tr><th>ชั้นที่ทำงาน</th><td>${esc(t.layer)}</td></tr>${t.facts.map(f=>`<tr><th>${esc(f[0])}</th><td>${esc(f[1])}</td></tr>`).join("")}</tbody></table>`;
+}
+function renderCode(){
+  const t=T(),cs=curStep();const lines=t.id==="espnow"?espCode(S.side):CODE[t.id];
+  const head=`<div class="code-h">`+(t.id==="espnow"?`<div class="seg" id="side"><button data-s="tx" aria-pressed="${S.side==="tx"}">ผู้ส่ง</button><button data-s="rx" aria-pressed="${S.side==="rx"}">ผู้รับ</button></div>`:`<span class="lbl">Arduino IDE / ESP32 core 3.x</span>`)+`<button class="copy" id="copy">คัดลอก</button></div>`;
+  const body=lines.map(([s,st])=>`<span class="ln${cs&&st.includes(cs)?" hl":(cs?" dim":"")}">${hlLine(s)}</span>`).join("");
+  $("#code").innerHTML=head+"<pre id=\"pre\">"+body+"</pre>";
+  const hl=$("#pre .hl");if(hl){const pre=$("#pre");pre.scrollTop=Math.max(0,hl.offsetTop-pre.clientHeight/2)}
+}
+function renderLegend(){$("#legend").innerHTML=T().legend.map(l=>`<span><i style="background:var(--${l[1]})"></i>${esc(l[2])}</span>`).join("")+(T().id==="espnow"?'<span><i style="background:var(--bad)"></i>สูญหาย / FAIL</span>':"")}
+function renderTable(){
+  const t=T();
+  $("#tbody").innerHTML=packets.map((p,i)=>`<tr data-i="${i}" class="${i>S.idx?"future":""}${i===S.idx?" cur":""}${p.lost||(p.lostTo&&p.lostTo.length)||p.bad?" lost":""}"><td><span class="num" style="background:${colorOf(t,p)}">${i+1}</span></td><td>${fmtT(p.t,t.unit)}</td><td>${esc(p.sa)}</td><td>${esc(p.da)}</td><td>${esc(p.proto)}</td><td class="info">${esc(p.info)}</td><td class="r">${p.size==="-"?"-":p.size+" B"}</td></tr>`).join("");
+  const r=$("#tbody tr.cur"),w=$("#tw");if(r){const top=r.offsetTop-40;if(top<w.scrollTop||top>w.scrollTop+w.clientHeight-80)w.scrollTop=Math.max(0,top-60)}
+}
+function renderDetail(){
+  const t=T(),i=S.sel!=null?S.sel:S.idx,p=packets[i];
+  if(!p){$("#detail").innerHTML=`<div><h5>รายละเอียดแพ็กเก็ต</h5><p>คลิกแถวในตารางเพื่อดูรายละเอียดของแพ็กเก็ตนั้น</p></div><div><h5>หมายเหตุ</h5><p>${esc(t.sizeNote||"ESP-NOW: ขนาดเฟรมรวม MAC header และ FCS คำนวณจากค่าในแผงจำลอง")}</p></div>`;return}
+  const f=p.fields||[["ต้นทาง",p.sa],["ปลายทาง",p.da],["โปรโตคอล",p.proto],["ขนาด",p.size==="-"?"-":p.size+" ไบต์"],["ขั้นตอน",p.step+" "+t.steps[p.step-1][0]]];
+  $("#detail").innerHTML=`<div><h5>#${i+1} ${esc(p.proto)} / ${fmtT(p.t,t.unit)}</h5><p>${esc(p.note||p.info)}</p></div><div><h5>ฟิลด์</h5><dl class="kv">${f.map(x=>`<dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd>`).join("")}</dl></div>`;
+}
+function renderNarr(){
+  const t=T(),p=packets[S.idx];
+  if(!p){$("#narrPill").textContent="พร้อม";$("#narrPill").style.color="var(--muted)";$("#narrTxt").textContent="กด PLAY เพื่อดูการสื่อสารทีละแพ็กเก็ต หรือกด STEP เพื่อเดินทีละขั้น คลิกแถวในตารางเพื่อกระโดดไปยังแพ็กเก็ตนั้น";return}
+  $("#narrPill").textContent=(S.idx+1)+" / "+packets.length+"  "+p.proto;$("#narrPill").style.color=colorOf(t,p);
+  $("#narrTxt").textContent=(p.note||p.info);
+}
+function renderLab(){
+  const isE=T().id==="espnow";$("#lab").hidden=!isE;$("#vFrame").hidden=!isE;
+  if(!isE){if(S.view==="frame")setView("net");$("#footNote").textContent=T().sizeNote||"";return}
+  const L=link(),fb=frameBytes(),bc=lab.mode==="bcast";
+  const seg=(id,v)=>document.querySelectorAll(id+" button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===String(v))));
+  seg("#cMode",lab.mode);seg("#cVer",lab.ver);seg("#cEnc",lab.enc&&!bc?1:0);
+  document.querySelectorAll("#cEnc button").forEach(b=>b.disabled=bc&&b.dataset.v==="1");
+  const pay=$("#cPay");pay.max=lab.ver===1?250:1470;if(lab.payload>+pay.max)lab.payload=+pay.max;pay.value=lab.payload;
+  $("#oPay").textContent=lab.payload+" ไบต์";$("#cDist").value=lab.dist;$("#oDist").textContent=lab.dist+" m";
+  $("#cEnv").value=lab.env;$("#cRate").value=String(lab.rate);$("#cCh").value=String(lab.rxch);
+  $("#cCount").value=lab.count;$("#oCount").textContent=lab.count+" ข้อความ";$("#cRetry").value=lab.retry;$("#oRetry").textContent=lab.retry+" ครั้ง";
+  $("#cRetry").disabled=bc;$("#cSeed").textContent="สุ่มใหม่ (ชุดที่ "+lab.seed+")";
+  const st=espStats,pc=v=>v>=.9?"good":v>=.5?"warn":"bad";
+  const rcls=lab.rxch!==1?"bad":L.margin>10?"good":L.margin>3?"warn":"bad";
+  let chips=`<span class="chip ${rcls}"><small>RSSI โดยประมาณ</small>${L.rssi.toFixed(1)} dBm</span><span class="chip ${rcls}"><small>margin จากความไวรับ</small>${L.margin.toFixed(1)} dB</span><span class="chip"><small>ขนาดเฟรม</small>${fb} B</span><span class="chip"><small>ออกอากาศ</small>${airtime(fb,lab.rate).toFixed(0)} µs</span>`;
+  if(bc)chips+=`<span class="chip ${pc(st.r1/lab.count)}"><small>ผู้รับ 1 ได้รับ</small>${st.r1} / ${lab.count}</span><span class="chip ${pc(st.r2/lab.count)}"><small>ผู้รับ 2 ได้รับ</small>${st.r2} / ${lab.count}</span>`;
+  else chips+=`<span class="chip ${pc(st.ok/lab.count)}"><small>send_cb SUCCESS</small>${st.ok} / ${lab.count}</span><span class="chip"><small>เฟรมที่ส่งจริง</small>${st.tx}</span>`;
+  $("#chips").innerHTML=chips;
+  let hint="โมเดลสัญญาณ: กำลังส่ง 20 dBm, path loss 40 dB ที่ 1 m เลขชี้กำลัง "+L.n+", ความไวรับ "+SENS[lab.rate]+" dBm ที่ "+lab.rate+" Mbps (ค่าประมาณเพื่อการสอน ไม่ใช่ค่าวัดจริง)";
+  if(lab.rxch!==1)hint="ช่องไม่ตรงกัน: ผู้ส่งอยู่ CH 1 ผู้รับอยู่ CH "+lab.rxch+" เฟรมทุกเฟรมจะไม่ถึงผู้รับ ลองเปลี่ยนกลับเป็น CH 1";
+  else if(bc&&lab.enc)hint="broadcast เข้ารหัสไม่ได้ ESP-NOW ไม่รองรับการเข้ารหัสเฟรม multicast";
+  $("#labHint").textContent=hint;
+  $("#footNote").textContent="ข้อมูลรูปแบบเฟรมและข้อจำกัดอ้างอิงเอกสาร ESP-IDF Programming Guide หัวข้อ ESP-NOW";
+}
+function setView(v){S.view=v;document.querySelectorAll("#vtabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.v===v)));$("#net").hidden=v!=="net";$("#seqWrap").hidden=v!=="seq";$("#frameWrap").hidden=v!=="frame";if(v==="seq")drawSeq();if(v==="frame")drawFrame()}
+function renderState(){renderTopics();renderTable();renderNarr();renderDetail();if(S.tab==="code")renderCode();if(S.view==="seq")drawSeq()}
+function renderAll(){renderHeader();renderCats();renderLegend();renderOverview();renderLab();drawNet();if(S.view==="frame")drawFrame();renderState();if(S.tab==="code")renderCode()}
+
+/* ---------- playback ---------- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function speed(){return parseFloat($("#speed").value)||1}
+async function stepFwd(tok){
+  if(S.idx>=packets.length-1)return false;
+  S.idx++;S.sel=null;renderState();
+  await animate(packets[S.idx],900/speed(),tok);
+  if(S.idx===packets.length-1)markDone();
+  return true;
+}
+function markDone(){if(!done.includes(S.topic)){done.push(S.topic);store.set("esp32lab.done",done);renderHeader();renderTopics()}}
+function setPlaying(v){S.playing=v;$("#bPlay").textContent=v?"PAUSE":(S.idx>=packets.length-1&&S.idx>=0?"REPLAY":"PLAY")}
+async function play(){
+  if(S.idx>=packets.length-1){S.idx=-1;renderState()}
+  const tok=++S.tok;setPlaying(true);
+  while(S.playing&&tok===S.tok){const ok=await stepFwd(tok);if(!ok||tok!==S.tok)break;await sleep(260/speed())}
+  if(tok===S.tok)setPlaying(false);
+}
+function stop(){S.tok++;S.playing=false;const g=$("#pk");if(g)g.innerHTML="";setPlaying(false)}
+function reset(){stop();S.idx=-1;S.sel=null;renderState();setPlaying(false)}
+function selectTopic(id){if(id===S.topic)return;stop();S.topic=id;store.set("esp32lab.topic",id);S.idx=-1;S.sel=null;rebuild();renderAll();setPlaying(false)}
+function labChanged(){stop();S.idx=-1;S.sel=null;rebuild();renderLab();drawNet();if(S.view==="frame")drawFrame();renderState();if(S.tab==="code")renderCode();setPlaying(false)}
+
+/* ---------- events ---------- */
+$("#bPlay").onclick=()=>{S.playing?stop():play()};
+$("#bStep").onclick=()=>{stop();stepFwd(S.tok).then(()=>setPlaying(false))};
+$("#bPrev").onclick=()=>{stop();if(S.idx>=0){S.idx--;S.sel=null;renderState()}setPlaying(false)};
+$("#bReset").onclick=reset;
+$("#tbody").onclick=e=>{const tr=e.target.closest("tr");if(!tr)return;stop();S.idx=+tr.dataset.i;S.sel=null;renderState();animate(packets[S.idx],900/speed(),S.tok);if(S.idx===packets.length-1)markDone();setPlaying(false)};
+$("#tlist").onclick=e=>{const b=e.target.closest("button[data-t]");if(b)selectTopic(b.dataset.t)};
+$("#cats").onclick=e=>{const b=e.target.closest("button");if(!b)return;S.cat=b.dataset.c;renderCats();renderTopics()};
+$("#vtabs").onclick=e=>{const b=e.target.closest("button");if(b)setView(b.dataset.v)};
+$("#itabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;S.tab=b.dataset.t;document.querySelectorAll("#itabs button").forEach(x=>x.setAttribute("aria-selected",String(x===b)));$("#ov").hidden=S.tab!=="ov";$("#code").hidden=S.tab!=="code";if(S.tab==="code")renderCode()};
+$("#code").addEventListener("click",e=>{
+  const s=e.target.closest("button[data-s]");if(s){S.side=s.dataset.s;renderCode();return}
+  if(e.target.id==="copy"){const t=T();const txt=(t.id==="espnow"?espCode(S.side):CODE[t.id]).map(l=>l[0]).join("\n");const b=e.target;
+    const ok=()=>{b.textContent="คัดลอกแล้ว";setTimeout(()=>b.textContent="คัดลอก",1500)};
+    try{navigator.clipboard.writeText(txt).then(ok,()=>{selPre()})}catch(err){selPre()}}
+});
+function selPre(){const r=document.createRange();r.selectNodeContents($("#pre"));const s=getSelection();s.removeAllRanges();s.addRange(r)}
+const segBind=(id,fn)=>$(id).addEventListener("click",e=>{const b=e.target.closest("button");if(b&&!b.disabled){fn(b.dataset.v);labChanged()}});
+segBind("#cMode",v=>{lab.mode=v;if(v==="bcast")lab.enc=false});
+segBind("#cVer",v=>lab.ver=+v);
+segBind("#cEnc",v=>lab.enc=v==="1");
+const rng2=(id,fn)=>$(id).addEventListener("input",e=>{fn(+e.target.value);labChanged()});
+rng2("#cPay",v=>lab.payload=v);rng2("#cDist",v=>lab.dist=v);rng2("#cCount",v=>lab.count=v);rng2("#cRetry",v=>lab.retry=v);
+$("#cEnv").onchange=e=>{lab.env=e.target.value;labChanged()};
+$("#cRate").onchange=e=>{lab.rate=+e.target.value;labChanged()};
+$("#cCh").onchange=e=>{lab.rxch=+e.target.value;labChanged()};
+$("#cSeed").onclick=()=>{lab.seed++;labChanged()};
+// theme
+function setTheme(m){const r=document.documentElement;if(m==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",m);["Auto","Light","Dark"].forEach(k=>$("#th"+k).setAttribute("aria-pressed",String(k.toLowerCase()===m)));store.set("esp32lab.theme",m)}
+$("#thAuto").onclick=()=>setTheme("auto");$("#thLight").onclick=()=>setTheme("light");$("#thDark").onclick=()=>setTheme("dark");
+setTheme(store.get("esp32lab.theme","auto"));
+
+rebuild();renderAll();setView("net");
+})();
+</script>
+
+</body>
+</html>
